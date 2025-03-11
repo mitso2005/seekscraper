@@ -5,6 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import os
 import time
+import re
 
 # Locate ChromeDriver
 os.environ['PATH'] += r"C:/seleniumDrivers"
@@ -42,11 +43,32 @@ job_description = driver.find_element(By.CSS_SELECTOR, '[data-automation="jobAdD
 # Store the job description as a string
 job_description_text = job_description.lower()  # Convert to lowercase for case-insensitive search
 
-# Check if the keyword 'python' appears in the description
-if '\bpython\b' in job_description_text:
-    print("This job requires Python skills!")
+# Prompt user for keywords to search
+user_input = input("Enter keyword(s) to search for (separate multiple keywords with commas): ")
+keywords = [keyword.strip().lower() for keyword in user_input.split(',')]
+
+print(f"\nSearching for keywords: {', '.join(keywords)}")
+
+# Check for each keyword in the description
+found_keywords = []
+not_found_keywords = []
+
+for keyword in keywords:
+    # Use word boundaries to match whole words
+    pattern = r'\b' + re.escape(keyword) + r'\b'
+    if re.search(pattern, job_description.lower()):
+        found_keywords.append(keyword)
+    else:
+        not_found_keywords.append(keyword)
+
+# Print summary
+if found_keywords:
+    print(f"\nKeywords found: {', '.join(found_keywords)}")
 else:
-    print("Python is not mentioned in this job description.")
+    print("\nNo keywords were found in the job description.")
+    
+if not_found_keywords:
+    print(f"Keywords not found: {', '.join(not_found_keywords)}")
 
 # Close the browser
 driver.quit()
