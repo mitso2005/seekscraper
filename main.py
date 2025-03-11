@@ -14,61 +14,52 @@ os.environ['PATH'] += r"C:/seleniumDrivers"
 driver = webdriver.Chrome()
 
 # Open the Seek job listings page
-driver.get("https://www.seek.com.au/software-engineer-jobs")
+driver.get("https://www.seek.com.au/python-jobs")
 
 # Wait for job postings to load
 WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-automation="jobTitle"]')))
 
 # Select job postings
 job_postings = driver.find_elements(By.CSS_SELECTOR, '[data-automation="jobTitle"]')
+jobs_avaliable = len(job_postings)
 
-# Get the first job posting title
-first_job_title = job_postings[0].text
-print(f"First job title: {first_job_title}")
-
-# Alternatively, if you want to get the href attribute as well:
-first_job_href = job_postings[0].get_attribute('href')
-print(f"First job link: {first_job_href}")
-
-# Navigate to the job posting URL
-driver.get(first_job_href)
-
-# Wait for the job description to load (you might need to adjust the selector based on the actual page structure)
-WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-automation="jobAdDetails"]')))
-
-# Extract the job description text
-# Note: The actual selector might differ depending on the website structure
-job_description = driver.find_element(By.CSS_SELECTOR, '[data-automation="jobAdDetails"]').text
-
-# Store the job description as a string
-job_description_text = job_description.lower()  # Convert to lowercase for case-insensitive search
+# Prompt user for the number of job postings they want to search
+jobs_searching = input(f"Enter how many job postings you'd like to scrape (max = {jobs_avaliable}): ")
 
 # Prompt user for keywords to search
-user_input = input("Enter keyword(s) to search for (separate multiple keywords with commas): ")
-keywords = [keyword.strip().lower() for keyword in user_input.split(',')]
+keyword_input = input("Enter keyword(s) to search for (separate multiple keywords with commas): ")
+# Create a dictionary with each keyword initialized to 0
+keywords = {keyword.strip().lower(): 0 for keyword in keyword_input.split(',')}
 
 print(f"\nSearching for keywords: {', '.join(keywords)}")
 
-# Check for each keyword in the description
-found_keywords = []
-not_found_keywords = []
+for i in range(0, int(jobs_searching) - 1):
+    # Refresh the job postings list inside the loop
+    job_postings = driver.find_elements(By.CSS_SELECTOR, '[data-automation="jobTitle"]')
+    
+    if i >= len(job_postings):  # Ensure we're not going out of range
+        break
+    
+    job_current = job_postings[i].get_attribute('href')
+    driver.get(job_current)
 
-for keyword in keywords:
-    # Use word boundaries to match whole words
-    pattern = r'\b' + re.escape(keyword) + r'\b'
-    if re.search(pattern, job_description.lower()):
-        found_keywords.append(keyword)
-    else:
-        not_found_keywords.append(keyword)
+    # Wait for the job description to load
+    WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-automation="jobAdDetails"]')))
+
+    # Extract and store the job description as a string
+    job_description = driver.find_element(By.CSS_SELECTOR, '[data-automation="jobAdDetails"]').text
+    job_description_text = job_description.lower()  # Convert to lowercase for case-insensitive search
+
+    # Check each keyword
+    for keyword in keywords:
+        # If the keyword appears in the job description, increment the count by 1
+        if re.search(r'\b' + re.escape(keyword) + r'\b', job_description_text):
+            keywords[keyword] += 1
 
 # Print summary
-if found_keywords:
-    print(f"\nKeywords found: {', '.join(found_keywords)}")
-else:
-    print("\nNo keywords were found in the job description.")
-    
-if not_found_keywords:
-    print(f"Keywords not found: {', '.join(not_found_keywords)}")
+print("\nKeyword counts:")
+for keyword, count in keywords.items():
+    print(f"{keyword}: {count}")
 
 # Close the browser
 driver.quit()
