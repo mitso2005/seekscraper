@@ -2,7 +2,7 @@
 
 This is a super simple python program that uses selenium to scrape through seek job postings and calulate the frequency of any specified key words. Its intended use is for finding the most in demand programing languages for software engineering roles however it can be used to find how often any key word appears for any type of job.
 
-**Only scraping <23 jobs at a time at the moment. Will fix soon!!**
+<ins>**Only scraping 22 jobs at a time at the moment. Will fix soon!!**</ins>
 
 The prgoram is simple:
 
