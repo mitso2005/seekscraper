@@ -37,7 +37,7 @@ Ensure you have the following installed on your system:
    ```
 2. **Run the script:**
    ```sh
-   python scraper.py
+   python main.py
    ```
 3. **Follow the prompts:**
    - Enter the job title (e.g., "software engineer").
