@@ -163,7 +163,7 @@ def click_next_page(driver):
                 driver.execute_script("arguments[0].click();", next_button)
                 time.sleep(3)  # Wait for page to load
                 
-                # Verify we're on a new page by checking URL changed
+                # Verify we're on a new page by checking URL chan
                 return True
             except:
                 continue
@@ -217,6 +217,7 @@ def scrape_job_details(driver, job_url, retry_count=0, max_retries=3):
         'location': '',
         'classification': '',
         'work_type': '',
+        'salary': '',
         'time_posted': '',
         'application_volume': '',
         'email': '',
@@ -285,6 +286,36 @@ def scrape_job_details(driver, job_url, retry_count=0, max_retries=3):
                 job_data['work_type'] = work_type_element.text.strip()
             except:
                 job_data['work_type'] = ''
+        
+        # Extract salary (both listed salary and predicted range)
+        try:
+            # Try to find listed salary first
+            salary_element = driver.find_element(By.CSS_SELECTOR, '[data-automation="job-detail-salary"]')
+            job_data['salary'] = salary_element.text.strip()
+        except:
+            try:
+                # Look for salary info in common span elements
+                salary_spans = driver.find_elements(By.CSS_SELECTOR, 'span[data-automation="job-detail-salary"]')
+                if salary_spans:
+                    job_data['salary'] = salary_spans[0].text.strip()
+            except:
+                pass
+        
+        # If no listed salary, look for predicted salary range
+        if not job_data['salary']:
+            try:
+                # Look for predicted salary text patterns
+                salary_elements = driver.find_elements(By.XPATH, "//*[contains(text(), '$') or contains(text(), 'salary')]")
+                for element in salary_elements:
+                    text = element.text.strip()
+                    # Look for salary range patterns (e.g., "$80,000 - $100,000", "$80k - $100k")
+                    if '$' in text and ('-' in text or 'to' in text.lower()):
+                        # Avoid the profile insight message
+                        if 'profile' not in text.lower() and 'add' not in text.lower():
+                            job_data['salary'] = text
+                            break
+            except:
+                pass
         
         # Extract time posted (looking for "Posted X ago" pattern)
         try:
@@ -514,11 +545,11 @@ def main():
                     except:
                         print(f"    Still failed, marking for retry")
                         failed_jobs.append(job_url)
-                        all_jobs_data.append({'job_title': '', 'company': '', 'location': '', 'classification': '', 'work_type': '', 'time_posted': '', 'application_volume': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
+                        all_jobs_data.append({'job_title': '', 'company': '', 'location': '', 'classification': '', 'work_type': '', 'salary': '', 'time_posted': '', 'application_volume': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
                 else:
                     print(f"    Error: {e}")
                     failed_jobs.append(job_url)
-                    all_jobs_data.append({'job_title': '', 'company': '', 'location': '', 'classification': '', 'work_type': '', 'time_posted': '', 'application_volume': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
+                    all_jobs_data.append({'job_title': '', 'company': '', 'location': '', 'classification': '', 'work_type': '', 'salary': '', 'time_posted': '', 'application_volume': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
             
             # Progress update every 10 jobs
             if idx % 10 == 0:
@@ -527,7 +558,7 @@ def main():
             # Save to Excel every 100 entries (crash safety)
             if idx % 100 == 0:
                 df_checkpoint = pd.DataFrame(all_jobs_data)
-                df_checkpoint = df_checkpoint[['job_title', 'company', 'location', 'classification', 'work_type', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
+                df_checkpoint = df_checkpoint[['job_title', 'company', 'location', 'classification', 'work_type', 'salary', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
                 df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
                 print(f"  💾 Checkpoint saved: {idx} jobs saved to {filename}")
                 
@@ -561,7 +592,7 @@ def main():
         if all_jobs_data:
             df = pd.DataFrame(all_jobs_data)
             # Reorder columns
-            df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
+            df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'salary', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
             
             df.to_excel(filename, index=False, engine='openpyxl')
             
@@ -587,7 +618,7 @@ def main():
         if all_jobs_data:
             try:
                 df = pd.DataFrame(all_jobs_data)
-                df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
+                df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'salary', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"seek_ict_jobs_melbourne_interrupted_{timestamp}.xlsx"
                 df.to_excel(filename, index=False, engine='openpyxl')
@@ -602,7 +633,7 @@ def main():
         if all_jobs_data:
             try:
                 df = pd.DataFrame(all_jobs_data)
-                df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
+                df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'salary', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"seek_ict_jobs_melbourne_error_{timestamp}.xlsx"
                 df.to_excel(filename, index=False, engine='openpyxl')
