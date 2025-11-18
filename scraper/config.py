@@ -1,0 +1,35 @@
+"""Configuration and constants for the Seek scraper."""
+
+# Search configuration
+CLASSIFICATION = "information-communication-technology"
+LOCATION = "All-Melbourne-VIC"
+BASE_URL = "https://www.seek.com.au"
+
+# Scraping settings
+DEFAULT_WORKERS = 5
+MAX_WORKERS = 10
+CHECKPOINT_INTERVAL = 100
+MAX_PAGES = 100
+
+# Timeout settings (in seconds)
+PAGE_LOAD_TIMEOUT = 2
+ELEMENT_WAIT_TIMEOUT = 2
+BRIEF_PAUSE = 0.3
+PAGE_TRANSITION = 1
+PAGINATION_SCROLL = 1
+
+# Chrome options
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+# Data columns
+COLUMNS = [
+    'job_title', 'company', 'location', 'classification', 
+    'work_type', 'salary', 'time_posted', 'application_volume', 
+    'email', 'phone', 'website', 'url'
+]
+
+# Invalid website domains to filter
+INVALID_DOMAINS = [
+    'ogp.me', 'schema.org', 'w3.org', 'xmlns.com', 'example.com',
+    'facebook.com/sharer', 'twitter.com/intent', 'linkedin.com/sharing'
+]
