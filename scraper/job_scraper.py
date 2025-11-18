@@ -149,6 +149,21 @@ def is_recruitment_company(company_name):
     return False
 
 
+def is_permanent_role(work_type):
+    """
+    Check if the job is a permanent role (full-time or part-time).
+    Returns True if work_type contains 'full time', 'full-time', 'part time', or 'part-time'.
+    Returns False for contract, temp, casual roles.
+    """
+    if not work_type:
+        return False
+    
+    work_type_lower = work_type.lower().strip()
+    # Accept full-time and part-time
+    return ('Full time' in work_type_lower or 'Full-time' in work_type_lower or
+            'Part time' in work_type_lower or 'Part-time' in work_type_lower)
+
+
 def scrape_job_details(driver, job_url):
     """Scrape all job details from a given job URL."""
     job_data = create_empty_job_data(job_url)
@@ -169,13 +184,18 @@ def scrape_job_details(driver, job_url):
         job_data['job_title'] = extract_job_title(driver)
         job_data['company'] = extract_company(driver)
         
-        # Check if this is a recruitment company - return None to skip this job
+        # EARLY FILTER 1: Check if this is a recruitment company - return None to skip
         if is_recruitment_company(job_data['company']):
             return None
         
+        # EARLY FILTER 2: Extract and check work type immediately
+        job_data['work_type'] = extract_work_type(driver)
+        if not is_permanent_role(job_data['work_type']):
+            return None
+        
+        # Continue with remaining fields only if filters passed
         job_data['location'] = extract_location(driver)
         job_data['classification'] = extract_classification(driver)
-        job_data['work_type'] = extract_work_type(driver)
         job_data['salary'] = extract_salary(driver)
         job_data['time_posted'] = extract_time_posted(driver)
         
