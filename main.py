@@ -638,31 +638,39 @@ def main():
         # Save whatever data we have so far
         if all_jobs_data:
             try:
-                df = pd.DataFrame(all_jobs_data)
-                df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'salary', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"seek_ict_jobs_melbourne_interrupted_{timestamp}.xlsx"
-                df.to_excel(filename, index=False, engine='openpyxl')
-                print(f"💾 Partial data saved to: {filename} ({len(all_jobs_data)} jobs)")
+                # Filter out None values before creating DataFrame
+                valid_data = [j for j in all_jobs_data if j is not None]
+                if valid_data:
+                    df = pd.DataFrame(valid_data)
+                    df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'salary', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"seek_ict_jobs_melbourne_interrupted_{timestamp}.xlsx"
+                    df.to_excel(filename, index=False, engine='openpyxl')
+                    print(f"💾 Partial data saved to: {filename} ({len(valid_data)} jobs)")
+                else:
+                    print("No valid data to save.")
             except Exception as save_error:
                 print(f"Could not save partial data: {save_error}")
-        if driver:
-            driver.quit()
+        # Note: In parallel mode, browsers are managed by threads and will close automatically
     except Exception as e:
         print(f"\n❌ Error during scraping: {e}")
         # Save whatever data we have so far
         if all_jobs_data:
             try:
-                df = pd.DataFrame(all_jobs_data)
-                df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'salary', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"seek_ict_jobs_melbourne_error_{timestamp}.xlsx"
-                df.to_excel(filename, index=False, engine='openpyxl')
-                print(f"💾 Partial data saved to: {filename} ({len(all_jobs_data)} jobs)")
+                # Filter out None values before creating DataFrame
+                valid_data = [j for j in all_jobs_data if j is not None]
+                if valid_data:
+                    df = pd.DataFrame(valid_data)
+                    df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'salary', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"seek_ict_jobs_melbourne_error_{timestamp}.xlsx"
+                    df.to_excel(filename, index=False, engine='openpyxl')
+                    print(f"💾 Partial data saved to: {filename} ({len(valid_data)} jobs)")
+                else:
+                    print("No valid data to save.")
             except Exception as save_error:
                 print(f"Could not save partial data: {save_error}")
-        if driver:
-            driver.quit()
+        # Note: In parallel mode, browsers are managed by threads and will close automatically
         raise
 
 if __name__ == "__main__":
