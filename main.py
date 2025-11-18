@@ -2,123 +2,413 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import os
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+import pandas as pd
 import re
+import time
+from datetime import datetime
 
-def setup_driver():
+def setup_driver(headless=False):
     """Initialize and return a Selenium WebDriver instance."""
     try:
-        os.environ['PATH'] += r"C:/seleniumDrivers"
-        # Set Chrome options for headless mode
         options = webdriver.ChromeOptions()
-        options.add_argument("--headless")
-        return webdriver.Chrome(options=options)
+        if headless:
+            options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--start-maximized")
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        
+        # Use webdriver-manager to handle ChromeDriver installation
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+        
+        # Execute CDP commands to hide webdriver property
+        driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+            "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        })
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        
+        return driver
     except Exception as e:
         print(f"Error initializing the WebDriver: {e}")
-        exit()  # Exit if the driver can't be initialized
+        exit()
+
+def build_search_url():
+    """Build the Seek URL for ICT jobs in All Melbourne VIC."""
+    # Seek URL structure for classification and location filters
+    # Classification: Information & Communication Technology (ID: 6281)
+    # Location: All Melbourne VIC (ID: 3000)
+    base_url = "https://www.seek.com.au/information-communication-technology-jobs/in-All-Melbourne-VIC"
+    return base_url
 
 def get_total_jobs(driver):
     """Extract and return the total number of job postings available."""
     try:
-        total_jobs_element = driver.find_element(By.CSS_SELECTOR, '[data-automation="totalJobsCount"]')
-        return total_jobs_element.text
+        # Wait for page to fully load
+        time.sleep(3)
+        
+        # Try multiple selectors for job count
+        selectors = [
+            '[data-automation="totalJobsCount"]',
+            'span[data-automation="totalJobsCount"]',
+            '.yvsb870',  # Common Seek class for job count
+            'strong[data-automation="totalJobsCount"]'
+        ]
+        
+        for selector in selectors:
+            try:
+                total_jobs_element = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                )
+                total_text = total_jobs_element.text.replace(',', '').strip()
+                if total_text.isdigit():
+                    return int(total_text)
+            except:
+                continue
+        
+        # If all selectors fail, try to find any element with job count pattern
+        page_source = driver.page_source
+        import re
+        match = re.search(r'(\d{1,3}(?:,?\d{3})*)\s*(?:jobs?|results?)', page_source, re.IGNORECASE)
+        if match:
+            count_text = match.group(1).replace(',', '')
+            print(f"Found job count via regex: {count_text}")
+            return int(count_text)
+        
+        # Save screenshot for debugging
+        driver.save_screenshot("debug_screenshot.png")
+        print("Could not find job count. Screenshot saved to debug_screenshot.png")
+        return 0
+        
     except Exception as e:
         print(f"Error while extracting job count: {e}")
-        return "0"  # Return "0" if there's an issue with extracting the count
+        driver.save_screenshot("error_screenshot.png")
+        return 0
 
-def get_job_postings(driver):
-    """Return a list of job posting elements."""
+def get_job_links_on_page(driver):
+    """Extract all job links from the current page."""
+    job_links = []
     try:
-        return driver.find_elements(By.CSS_SELECTOR, '[data-automation="jobTitle"]')
+        time.sleep(2)  # Wait for dynamic content
+        
+        # Try multiple selectors
+        selectors = [
+            'a[data-automation="jobTitle"]',
+            '[data-automation="jobTitle"]',
+            'a[data-card-tracking-control="true"]',
+            'article a[href*="/job/"]'
+        ]
+        
+        for selector in selectors:
+            try:
+                job_cards = WebDriverWait(driver, 5).until(
+                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, selector))
+                )
+                if job_cards:
+                    for card in job_cards:
+                        try:
+                            link = card.get_attribute('href')
+                            if link and '/job/' in link:
+                                job_links.append(link)
+                        except:
+                            continue
+                    if job_links:
+                        return job_links
+            except:
+                continue
+        
+        return job_links
     except Exception as e:
-        print(f"Error retrieving job postings: {e}")
-        return []  # Return an empty list if an error occurs
+        print(f"Error retrieving job links: {e}")
+        return []
 
-def get_keywords():
-    """Prompt user for keywords and return them as a dictionary."""
-    keyword_input = input("Enter keyword(s) to search for (separate multiple keywords with commas): ")
-    return {keyword.strip().lower(): 0 for keyword in keyword_input.split(',')}
+def click_next_page(driver):
+    """Click the next page button. Returns True if successful, False otherwise."""
+    try:
+        # Scroll to bottom to ensure pagination is visible
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1)
+        
+        # Try multiple selectors for the next button
+        next_selectors = [
+            'a[data-automation="page-next"]',
+            '[data-automation="page-next"]',
+            'a[aria-label="Next"]',
+            'nav[aria-label="pagination"] a:last-child'
+        ]
+        
+        for selector in next_selectors:
+            try:
+                next_button = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                )
+                
+                # Check if button is not disabled
+                if next_button.get_attribute('aria-disabled') == 'true':
+                    return False
+                
+                # Click using JavaScript to avoid interception issues
+                driver.execute_script("arguments[0].click();", next_button)
+                time.sleep(3)  # Wait for page to load
+                
+                # Verify we're on a new page by checking URL changed
+                return True
+            except:
+                continue
+        
+        return False
+        
+    except Exception as e:
+        print(f"  Error clicking next page: {e}")
+        return False
 
-def scrape_job_details(driver, job_url, keywords):
-    """Scrape job details from a given job URL and update keyword counts."""
+def extract_contact_info(text):
+    """Extract email, phone, and website from text."""
+    # Email pattern
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    
+    # Australian phone patterns - more restrictive
+    # Must have spaces, dashes, or parentheses to avoid random number sequences
+    phone_pattern = r'(?:\+61[\s-]?[2-478][\s-]?\d{4}[\s-]?\d{4}|\(0[2-8]\)[\s-]?\d{4}[\s-]?\d{4}|0[2-8][\s-]\d{4}[\s-]\d{4}|04\d{2}[\s-]\d{3}[\s-]\d{3}|1[38]00[\s-]\d{3}[\s-]\d{3})'
+    
+    # Website pattern - must start with http/https or www, and filter out common false positives
+    website_pattern = r'(?:https?://(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?(?:/[^\s<>"]*)?|www\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?(?:/[^\s<>"]*)?)'
+    
+    emails = re.findall(email_pattern, text)
+    phones = re.findall(phone_pattern, text)
+    websites = re.findall(website_pattern, text)
+    
+    # Filter out invalid emails (common false positives)
+    emails = [e for e in emails if not e.endswith('.png') and not e.endswith('.jpg')]
+    
+    # Filter phones - remove if no spaces/dashes/parentheses (likely not a real phone number)
+    phones = [p for p in phones if any(char in p for char in [' ', '-', '(', ')'])]
+    
+    # Filter websites - remove common false positives
+    invalid_domains = ['ogp.me', 'schema.org', 'w3.org', 'xmlns.com', 'example.com', 
+                       'facebook.com/sharer', 'twitter.com/intent', 'linkedin.com/sharing']
+    websites = [w for w in websites if not any(inv in w.lower() for inv in invalid_domains)]
+    websites = [w for w in websites if '@' not in w and not w.endswith('.jpg') and not w.endswith('.png')]
+    
+    # Only return if we have valid results
+    return {
+        'email': emails[0] if emails else '',
+        'phone': phones[0] if phones else '',
+        'website': websites[0] if websites else ''
+    }
+
+def scrape_job_details(driver, job_url):
+    """Scrape job details from a given job URL."""
+    job_data = {
+        'job_title': '',
+        'company': '',
+        'email': '',
+        'phone': '',
+        'website': '',
+        'url': job_url
+    }
+    
     try:
         driver.get(job_url)
-        WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-automation="jobAdDetails"]')))
-        job_description = driver.find_element(By.CSS_SELECTOR, '[data-automation="jobAdDetails"]').text.lower()
+        time.sleep(1)  # Brief pause to let page load
         
-        for keyword in keywords:
-            if re.search(r'\b' + re.escape(keyword) + r'\b', job_description):
-                keywords[keyword] += 1
+        # Extract job title
+        try:
+            title_element = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'h1[data-automation="job-detail-title"]'))
+            )
+            job_data['job_title'] = title_element.text.strip()
+        except:
+            try:
+                title_element = driver.find_element(By.TAG_NAME, 'h1')
+                job_data['job_title'] = title_element.text.strip()
+            except:
+                job_data['job_title'] = 'N/A'
+        
+        # Extract company name
+        try:
+            company_element = driver.find_element(By.CSS_SELECTOR, '[data-automation="advertiser-name"]')
+            job_data['company'] = company_element.text.strip()
+        except:
+            try:
+                company_element = driver.find_element(By.CSS_SELECTOR, 'span[data-automation="job-detail-advertiser"]')
+                job_data['company'] = company_element.text.strip()
+            except:
+                job_data['company'] = 'N/A'
+        
+        # Extract job description and contact info - ONLY from job description, not entire page
+        try:
+            description_element = driver.find_element(By.CSS_SELECTOR, '[data-automation="jobAdDetails"]')
+            description_text = description_element.text
+            
+            # Extract contact information ONLY from description
+            contact_info = extract_contact_info(description_text)
+            job_data['email'] = contact_info['email']
+            job_data['phone'] = contact_info['phone']
+            job_data['website'] = contact_info['website']
+        except:
+            pass
+        
+        # Don't extract from page source - it causes false positives from meta tags
+            
     except Exception as e:
-        print(f"Error while scraping job details from {job_url}: {e}")
+        print(f"Error scraping {job_url}: {e}")
+    
+    return job_data
 
 def main():
-    run_program = 'y'
-    while run_program == 'y':
-        try:
-            job_title = input("Enter job title to search for: ").replace(" ", "-")
-            driver = setup_driver()
-            driver.get(f"https://www.seek.com.au/{job_title}-jobs")
-            WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-automation="jobTitle"]')))
-            
-            jobs_available = get_total_jobs(driver)
-            print(f"Total jobs available: {jobs_available}")
-            
-            # Remove commas from jobs_available and convert to integer
-            jobs_available = int(jobs_available.replace(',', ''))
-
-            # Prompt user for input
-            jobs_searching = input(f"Enter how many job postings you'd like to scrape (max = {jobs_available}): ")
-
-            # Validate input with while loop
-            while not jobs_searching.isdigit() or int(jobs_searching) <= 0:
-                print("Invalid input. Please enter a valid positive integer value.")
-                jobs_searching = input(f"Enter how many job postings you'd like to scrape (max = {jobs_available}): ")
-
-            # Convert to integer after validation
-            jobs_searching = int(jobs_searching)
-
-            # Check if exceeds maximum and handle that case
-            if jobs_searching > jobs_available:
-                print(f"Can't scrape more than {jobs_available} jobs. Scraping {jobs_available} jobs instead.")
-                jobs_searching = jobs_available
-                        
-            keywords = get_keywords()
-            print(f"\nSearching for keywords: {', '.join(keywords)}")
-            
-            for i in range(jobs_searching):
-                job_postings = get_job_postings(driver)
-                if i >= len(job_postings):
-                    print("No more job postings available.")
-                    break
-                
-                job_url = job_postings[i].get_attribute('href')
-                scrape_job_details(driver, job_url, keywords)
-                
-                driver.back()
-                WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-automation="jobTitle"]')))
-            
-            print("\nKeyword counts:")
-            for keyword, count in keywords.items():
-                print(f"{keyword}: {count}")
-            
-            driver.quit()
+    print("=" * 60)
+    print("SEEK Web Scraper - ICT Jobs in All Melbourne VIC")
+    print("=" * 60)
+    print("\nNOTE: This scraper is for educational purposes only.")
+    
+    # Ask user how many pages to scrape
+    while True:
+        pages_input = input("\nHow many pages would you like to scrape? (each page ~22 jobs, enter number or 'all'): ").strip().lower()
+        if pages_input == 'all':
+            max_pages_to_scrape = None
+            print("Will scrape ALL available pages.")
+            break
+        elif pages_input.isdigit() and int(pages_input) > 0:
+            max_pages_to_scrape = int(pages_input)
+            print(f"Will scrape up to {max_pages_to_scrape} pages (~{max_pages_to_scrape * 22} jobs).")
+            break
+        else:
+            print("Invalid input. Please enter a positive number or 'all'.")
+    
+    print("\nInitializing...\n")
+    
+    # Run in visible mode for debugging (set to True for headless)
+    driver = setup_driver(headless=False)
+    all_jobs_data = []
+    
+    try:
+        # Navigate to the search page
+        search_url = build_search_url()
+        print(f"Navigating to: {search_url}\n")
+        driver.get(search_url)
         
-        except Exception as e:
-            print(f"Error during main program execution: {e}")
-            if driver:
-                driver.quit()  # Ensure the driver quits in case of any error
-
-        repeat_input = input("\nWould you like to scrape more jobs? (y/n): ").lower()
-        while repeat_input not in ['y', 'n']:
-            print("Invalid input. Please enter 'y' for Yes or 'n' for No.")
-            repeat_input = input("\nWould you like to scrape more jobs? (y/n): ").lower()
-
-        # After a valid input is entered, assign it to run_program
-        run_program = repeat_input
+        # Wait for page to load
+        print("Waiting for page to load...")
+        time.sleep(5)
+        
+        # Get total jobs available
+        total_jobs = get_total_jobs(driver)
+        print(f"Total ICT jobs in All Melbourne VIC: {total_jobs}")
+        
+        if total_jobs == 0:
+            print("\n⚠️  Could not detect jobs on the page.")
+            print("The browser window is open - please check if:")
+            print("  1. The page loaded correctly")
+            print("  2. There's a CAPTCHA or bot detection")
+            print("  3. The URL is correct")
+            print("\nPress Enter to continue with link extraction anyway, or Ctrl+C to quit...")
+            input()
+        
+        # Collect job links from all pages
+        all_job_links = []
+        page_num = 1
+        
+        print("\nCollecting job links from search results...")
+        
+        # Determine stopping condition
+        while True:
+            # Check if we've reached the page limit
+            if max_pages_to_scrape is not None and page_num > max_pages_to_scrape:
+                print(f"  Reached requested page limit ({max_pages_to_scrape} pages).")
+                break
+            
+            # Check if we've collected all jobs
+            if total_jobs > 0 and len(all_job_links) >= total_jobs:
+                print(f"  Collected all {total_jobs} available jobs.")
+                break
+            
+            print(f"  Scraping page {page_num}... (collected {len(all_job_links)} links so far)")
+            links = get_job_links_on_page(driver)
+            
+            if not links:
+                print(f"  No links found on page {page_num}")
+                if page_num == 1:
+                    print("\n⚠️  No job links found on first page. Check debug_screenshot.png")
+                    driver.save_screenshot("debug_first_page.png")
+                break
+            
+            all_job_links.extend(links)
+            
+            # Remove duplicates
+            all_job_links = list(dict.fromkeys(all_job_links))
+            
+            # Try to go to next page
+            if not click_next_page(driver):
+                print("  No more pages available.")
+                break
+            
+            page_num += 1
+            
+            # Absolute safety limit
+            if page_num > 100:
+                print("  Reached absolute page limit (100 pages).")
+                break
+        
+        print(f"\nTotal job links collected: {len(all_job_links)}")
+        
+        if len(all_job_links) == 0:
+            print("\n❌ No jobs found. Exiting.")
+            driver.quit()
+            return
+        
+        print("\nScraping individual job details...")
+        print("(This may take a while - approximately 3-5 seconds per job)\n")
+        
+        # Scrape each job
+        for idx, job_url in enumerate(all_job_links, 1):
+            print(f"  [{idx}/{len(all_job_links)}] Scraping job...")
+            job_data = scrape_job_details(driver, job_url)
+            all_jobs_data.append(job_data)
+            
+            # Progress update every 10 jobs
+            if idx % 10 == 0:
+                print(f"  Progress: {idx}/{len(all_job_links)} jobs scraped ({(idx/len(all_job_links)*100):.1f}%)")
+        
+        driver.quit()
+        
+        # Export to Excel
+        if all_jobs_data:
+            df = pd.DataFrame(all_jobs_data)
+            # Reorder columns
+            df = df[['job_title', 'company', 'email', 'phone', 'website', 'url']]
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"seek_ict_jobs_melbourne_{timestamp}.xlsx"
+            
+            df.to_excel(filename, index=False, engine='openpyxl')
+            
+            print("\n" + "=" * 60)
+            print(f"✅ SUCCESS! Data exported to: {filename}")
+            print(f"Total jobs scraped: {len(all_jobs_data)}")
+            print(f"Jobs with email: {df['email'].astype(bool).sum()}")
+            print(f"Jobs with phone: {df['phone'].astype(bool).sum()}")
+            print(f"Jobs with website: {df['website'].astype(bool).sum()}")
+            print("=" * 60)
+        else:
+            print("\nNo jobs were scraped. Please check the search criteria or website structure.")
+    
+    except KeyboardInterrupt:
+        print("\n\nScraping interrupted by user.")
+        if driver:
+            driver.quit()
+    except Exception as e:
+        print(f"\nError during scraping: {e}")
+        if driver:
+            driver.quit()
+        raise
 
 if __name__ == "__main__":
     main()
-
-print("\nI hope I was helpful,\ngoodbye!")
-exit()
