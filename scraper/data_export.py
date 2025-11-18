@@ -57,7 +57,7 @@ def print_statistics(df, filename, total_processed=None, filtered_count=0):
             print("\n" + "=" * 60)
             print("⚠️  All jobs were filtered out")
             print(f"Total jobs processed: {total_processed}")
-            print(f"Jobs filtered (recruitment companies + contract/temp): {filtered_count}")
+            print(f"Jobs filtered (recruitment + contract/temp + large companies): {filtered_count}")
             print("=" * 60)
         else:
             print("\nNo jobs were scraped. Please check the search criteria or website structure.")
@@ -73,8 +73,8 @@ def print_statistics(df, filename, total_processed=None, filtered_count=0):
     
     if total_processed and filtered_count > 0:
         print(f"Total jobs processed: {total_processed}")
-        print(f"Jobs filtered (recruitment companies + contract/temp): {filtered_count}")
-        print(f"Jobs saved to Excel (permanent roles only): {len(df)}")
+        print(f"Jobs filtered (recruitment + contract/temp + large companies): {filtered_count}")
+        print(f"Jobs saved to Excel (small-mid companies, permanent roles): {len(df)}")
     else:
         print(f"Total jobs scraped: {len(df)}")
     

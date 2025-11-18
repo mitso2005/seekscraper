@@ -80,7 +80,7 @@ def main():
         # Scrape jobs in parallel
         print(f"\n⚡ Scraping {len(all_job_links)} jobs using {num_workers} parallel browser(s)...")
         print("(Much faster with parallel processing!)")
-        print("🚫 Filtering: recruitment companies + contract/temp roles...\n")
+        print("🚫 Filtering: recruitment companies + contract/temp + large companies (1000+ employees)...\n")
         
         total_processed = len(all_job_links)
         all_jobs_data = scrape_jobs_in_parallel(all_job_links, start_job, num_workers, filename)

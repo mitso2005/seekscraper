@@ -49,9 +49,42 @@ def extract_company(driver):
     """Extract company name from the page."""
     selectors = [
         '[data-automation="advertiser-name"]',
-        'span[data-automation="job-detail-advertiser"]'
+        'span[data-automation="advertiser-name"]'
     ]
     return extract_text_by_selector(driver, selectors, 'N/A')
+
+
+def extract_company_size(driver):
+    """Extract company size from the page."""
+    try:
+        # Look for company size in various possible locations
+        # SEEK typically shows this as "X-Y employees" or "X+ employees"
+        size_selectors = [
+            '[data-automation="company-size"]',
+            'span[data-automation="company-size"]'
+        ]
+        
+        for selector in size_selectors:
+            try:
+                element = driver.find_element(By.CSS_SELECTOR, selector)
+                return element.text.strip()
+            except:
+                continue
+        
+        # Also check in company profile section
+        try:
+            profile_elements = driver.find_elements(By.CSS_SELECTOR, '[data-automation="company-profile"] span, [data-automation="advertiser-profile"] span')
+            for element in profile_elements:
+                text = element.text.strip().lower()
+                if 'employee' in text or 'staff' in text:
+                    return element.text.strip()
+        except:
+            pass
+            
+    except:
+        pass
+    
+    return ''
 
 
 def extract_location(driver):
@@ -160,8 +193,38 @@ def is_permanent_role(work_type):
     
     work_type_lower = work_type.lower().strip()
     # Accept full-time and part-time
-    return ('Full time' in work_type_lower or 'Full-time' in work_type_lower or
-            'Part time' in work_type_lower or 'Part-time' in work_type_lower)
+    return ('full time' in work_type_lower or 'full-time' in work_type_lower or
+            'part time' in work_type_lower or 'part-time' in work_type_lower)
+
+
+def is_large_company(company_size):
+    """
+    Check if the company is large (1000+ employees).
+    Returns True if company has 1000 or more employees.
+    Parses formats like: '1000-5000 employees', '5000+ employees', '10,000+ staff'
+    """
+    if not company_size:
+        return False  # Unknown size, don't filter
+    
+    company_size_lower = company_size.lower().strip()
+    
+    # Extract all numbers from the string
+    import re
+    numbers = re.findall(r'\d+[,\d]*', company_size_lower)
+    
+    if not numbers:
+        return False
+    
+    # Remove commas and convert to int
+    numbers = [int(n.replace(',', '')) for n in numbers]
+    
+    # Check if any number is >= 1000
+    # For ranges like "1000-5000", check the lower bound
+    # For "5000+", check that number
+    if numbers and numbers[0] >= 1000:
+        return True
+    
+    return False
 
 
 def scrape_job_details(driver, job_url):
@@ -182,18 +245,23 @@ def scrape_job_details(driver, job_url):
         
         # Extract all fields
         job_data['job_title'] = extract_job_title(driver)
-        job_data['company'] = extract_company(driver)
         
-        # EARLY FILTER 1: Check if this is a recruitment company - return None to skip
-        if is_recruitment_company(job_data['company']):
-            return None
-        
-        # EARLY FILTER 2: Extract and check work type immediately
+        # EARLY FILTER 1: Extract and check work type FIRST (remove contract/temp immediately)
         job_data['work_type'] = extract_work_type(driver)
         if not is_permanent_role(job_data['work_type']):
             return None
         
-        # Continue with remaining fields only if filters passed
+        # EARLY FILTER 2: Extract company and check if recruitment agency
+        job_data['company'] = extract_company(driver)
+        if is_recruitment_company(job_data['company']):
+            return None
+        
+        # EARLY FILTER 3: Extract and check company size (filter out 1000+ employees)
+        company_size = extract_company_size(driver)
+        if is_large_company(company_size):
+            return None
+        
+        # Continue with remaining fields only if all filters passed
         job_data['location'] = extract_location(driver)
         job_data['classification'] = extract_classification(driver)
         job_data['salary'] = extract_salary(driver)
