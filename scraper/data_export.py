@@ -31,9 +31,13 @@ def save_to_excel(all_jobs_data, filename):
     if not all_jobs_data:
         return None
     
-    df = pd.DataFrame(all_jobs_data)
-    df = df[COLUMNS]
+    print(f"\n  💾 Saving {len(all_jobs_data)} jobs to Excel...")
+    
+    # Create DataFrame with specified column order (more efficient)
+    df = pd.DataFrame(all_jobs_data, columns=COLUMNS)
     df.to_excel(filename, index=False, engine='openpyxl')
+    
+    print(f"  ✅ Excel file saved successfully")
     
     return df
 
@@ -58,6 +62,8 @@ def print_statistics(df, filename, total_processed=None, filtered_count=0):
         else:
             print("\nNo jobs were scraped. Please check the search criteria or website structure.")
         return
+    
+    print("\n  📊 Calculating statistics...")
     
     successful_scrapes = df[df['job_title'].notna() & (df['job_title'] != '') & (df['job_title'] != 'N/A')].shape[0]
     failed_scrapes = len(df) - successful_scrapes

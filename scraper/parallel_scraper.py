@@ -80,8 +80,10 @@ def scrape_jobs_in_parallel(job_urls, start_job, num_workers, filename):
                 print(f"  ✗ Job {idx+1} failed: {e}")
                 all_jobs_data[idx] = create_empty_job_data(job_urls[idx])
     
-    # Remove any None values
+    # Remove any None values with progress feedback
+    print("\n  📊 Processing scraped data...")
     all_jobs_data = [j for j in all_jobs_data if j is not None]
+    print(f"  ✅ Data processing complete: {len(all_jobs_data)} jobs ready for export")
     
     return all_jobs_data
 
@@ -89,8 +91,9 @@ def scrape_jobs_in_parallel(job_urls, start_job, num_workers, filename):
 def save_checkpoint(all_jobs_data, filename):
     """Save a checkpoint of the current scraping progress."""
     with data_lock:
+        # Filter None values efficiently
         valid_data = [j for j in all_jobs_data if j is not None]
         if valid_data:
-            df_checkpoint = pd.DataFrame(valid_data)
-            df_checkpoint = df_checkpoint[COLUMNS]
+            # Create DataFrame only once and save
+            df_checkpoint = pd.DataFrame(valid_data, columns=COLUMNS)
             df_checkpoint.to_excel(filename, index=False, engine='openpyxl')

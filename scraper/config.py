@@ -43,7 +43,7 @@ RECRUITMENT_COMPANIES = [
     'Michael Page Technology',
     'Michael Page',
     'Paxus',
-    'Talent International',
+    'Talent',
     'Peoplebank',
     'Finite IT',
     'Greythorn',
@@ -66,5 +66,10 @@ RECRUITMENT_COMPANIES = [
     'Bluefin',
     'Hudson Australia',
     'Hudson',
-    'Expert360'
+    'Expert360',
+    'Launch Recruitment',
+    'CircuIT Recruitment',
+    'CircuIT',
+    'Randstad Digital',
+    'Randstad'
 ]
