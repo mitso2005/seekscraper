@@ -18,7 +18,6 @@ def create_empty_job_data(job_url):
         'work_type': '',
         'salary': '',
         'time_posted': '',
-        'application_volume': '',
         'email': '',
         'phone': '',
         'website': '',
@@ -123,21 +122,6 @@ def extract_time_posted(driver):
     selectors = ['[data-automation="job-detail-date"]']
     return extract_text_by_selector(driver, selectors)
 
-
-def extract_application_volume(driver):
-    """Extract application volume from the page."""
-    try:
-        volume_elements = driver.find_elements(By.CSS_SELECTOR, '._1i38d6g0.dk7b5050.h9jxny0.h9jxny1.h9jxny1u.h9jxny6._1lwlriv4')
-        for element in volume_elements:
-            text = element.text.strip()
-            if text and 'volume' in text.lower():
-                return text
-    except:
-        pass
-    
-    return ''
-
-
 def extract_contact_details(driver):
     """Extract contact information from job description."""
     try:
@@ -194,7 +178,6 @@ def scrape_job_details(driver, job_url):
         job_data['work_type'] = extract_work_type(driver)
         job_data['salary'] = extract_salary(driver)
         job_data['time_posted'] = extract_time_posted(driver)
-        job_data['application_volume'] = extract_application_volume(driver)
         
         # Extract contact information
         contact_info = extract_contact_details(driver)
