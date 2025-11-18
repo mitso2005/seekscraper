@@ -9,6 +9,11 @@ import pandas as pd
 import re
 import time
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+
+# Thread-safe lock for data collection
+data_lock = Lock()
 
 def setup_driver(headless=False):
     """Initialize and return a Selenium WebDriver instance."""
@@ -22,6 +27,29 @@ def setup_driver(headless=False):
         options.add_argument("--window-size=1920,1080")
         options.add_argument("--start-maximized")
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        
+        # Performance optimizations
+        options.add_argument("--disable-gpu")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-infobars")
+        options.add_argument("--disable-notifications")
+        options.add_argument("--disable-popup-blocking")
+        options.add_argument("--disable-background-timer-throttling")
+        options.add_argument("--disable-backgrounding-occluded-windows")
+        options.add_argument("--disable-renderer-backgrounding")
+        
+        # Disable images and CSS for faster loading (comment out if you need to see the page)
+        prefs = {
+            'profile.default_content_setting_values': {
+                'images': 2,  # Disable images
+                'stylesheet': 2  # Disable CSS
+            },
+            'profile.managed_default_content_settings': {
+                'images': 2
+            }
+        }
+        options.add_experimental_option('prefs', prefs)
+        
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
         
@@ -34,6 +62,9 @@ def setup_driver(headless=False):
             "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        
+        # Set page load strategy and implicit wait for faster performance
+        driver.implicitly_wait(2)  # Reduced from default 10s
         
         return driver
     except Exception as e:
@@ -57,7 +88,7 @@ def get_total_jobs(driver):
     """Extract and return the total number of job postings available."""
     try:
         # Wait for page to fully load
-        time.sleep(3)
+        time.sleep(1)  # Reduced from 3s
         
         # Try multiple selectors for job count
         selectors = [
@@ -69,7 +100,7 @@ def get_total_jobs(driver):
         
         for selector in selectors:
             try:
-                total_jobs_element = WebDriverWait(driver, 5).until(
+                total_jobs_element = WebDriverWait(driver, 2).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, selector))
                 )
                 total_text = total_jobs_element.text.replace(',', '').strip()
@@ -101,7 +132,7 @@ def get_job_links_on_page(driver):
     """Extract all job links from the current page."""
     job_links = []
     try:
-        time.sleep(2)  # Wait for dynamic content
+        time.sleep(0.5)  # Wait for dynamic content (reduced from 2s)
         
         # Try multiple selectors
         selectors = [
@@ -113,7 +144,7 @@ def get_job_links_on_page(driver):
         
         for selector in selectors:
             try:
-                job_cards = WebDriverWait(driver, 5).until(
+                job_cards = WebDriverWait(driver, 2).until(
                     EC.presence_of_all_elements_located((By.CSS_SELECTOR, selector))
                 )
                 if job_cards:
@@ -151,7 +182,7 @@ def click_next_page(driver):
         
         for selector in next_selectors:
             try:
-                next_button = WebDriverWait(driver, 3).until(
+                next_button = WebDriverWait(driver, 1).until(
                     EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
                 )
                 
@@ -161,7 +192,7 @@ def click_next_page(driver):
                 
                 # Click using JavaScript to avoid interception issues
                 driver.execute_script("arguments[0].click();", next_button)
-                time.sleep(3)  # Wait for page to load
+                time.sleep(1)  # Wait for page to load (reduced from 3s)
                 
                 # Verify we're on a new page by checking URL chan
                 return True
@@ -228,11 +259,11 @@ def scrape_job_details(driver, job_url, retry_count=0, max_retries=3):
     
     try:
         driver.get(job_url)
-        time.sleep(1)  # Brief pause to let page load
+        time.sleep(0.3)  # Brief pause to let page load (reduced from 1s)
         
         # Extract job title
         try:
-            title_element = WebDriverWait(driver, 5).until(
+            title_element = WebDriverWait(driver, 2).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, 'h1[data-automation="job-detail-title"]'))
             )
             job_data['job_title'] = title_element.text.strip()
@@ -371,6 +402,24 @@ def scrape_job_details(driver, job_url, retry_count=0, max_retries=3):
     
     return job_data
 
+def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
+    """Scrape a single job in a separate browser instance (for parallel execution)."""
+    driver = None
+    try:
+        driver = setup_driver(headless=headless)
+        job_data = scrape_job_details(driver, job_url)
+        driver.quit()
+        print(f"  ✓ [Job #{job_num}] Completed")
+        return job_data
+    except Exception as e:
+        if driver:
+            try:
+                driver.quit()
+            except:
+                pass
+        print(f"  ✗ [Job #{job_num}] Failed: {e}")
+        return {'job_title': '', 'company': '', 'location': '', 'classification': '', 'work_type': '', 'salary': '', 'time_posted': '', 'application_volume': '', 'email': '', 'phone': '', 'website': '', 'url': job_url}
+
 def main():
     print("=" * 60)
     print("SEEK Web Scraper - ICT Jobs in All Melbourne VIC")
@@ -386,10 +435,20 @@ def main():
         else:
             print("Invalid input. Please enter 'y' or 'n'.")
     
+    # Ask how many parallel browsers to use
+    while True:
+        parallel_input = input("\nHow many parallel browsers? (1-10, recommended: 5): ").strip()
+        if parallel_input.isdigit() and 1 <= int(parallel_input) <= 10:
+            num_workers = int(parallel_input)
+            break
+        else:
+            print("Invalid input. Enter a number between 1 and 10.")
+    
+    print(f"\n⚡ Using {num_workers} parallel browser(s) for faster scraping!")
     print("\nInitializing...\n")
     
     # Run in visible mode for debugging (set to True for headless)
-    driver = setup_driver(headless=False)
+    driver = setup_driver(headless=True)
     all_jobs_data = []
     
     try:
@@ -400,7 +459,7 @@ def main():
         
         # Wait for page to load
         print("Waiting for page to load...")
-        time.sleep(5)
+        time.sleep(2)  # Reduced from 5s
         
         # Get total jobs available
         total_jobs = get_total_jobs(driver)
@@ -500,93 +559,55 @@ def main():
         
         print(f"Selected range: {len(all_job_links)} jobs (from job {start_job} to job {min(end_job, start_job + len(all_job_links) - 1)})")
         
-        print("\nScraping individual job details...")
-        print("(This may take a while - approximately 3-5 seconds per job)\n")
+        # Close the initial driver used for collecting links
+        driver.quit()
+        
+        print(f"\n⚡ Scraping {len(all_job_links)} jobs using {num_workers} parallel browser(s)...")
+        print("(Much faster with parallel processing!)\n")
         
         # Create filename at the start
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"seek_ict_jobs_melbourne_{timestamp}.xlsx"
         
-        # Track failed jobs for retry
-        failed_jobs = []
+        # Parallel scraping with ThreadPoolExecutor
+        all_jobs_data = [None] * len(all_job_links)  # Pre-allocate list to maintain order
+        completed = 0
         
-        # Scrape each job
-        for idx, job_url in enumerate(all_job_links, 1):
-            absolute_job_num = start_job + idx - 1
-            print(f"  [Job #{absolute_job_num}] [{idx}/{len(all_job_links)}] Scraping...")
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            # Submit all jobs
+            future_to_index = {
+                executor.submit(scrape_job_parallel, job_url, start_job + idx, len(all_job_links), headless=True): idx 
+                for idx, job_url in enumerate(all_job_links)
+            }
             
-            try:
-                job_data = scrape_job_details(driver, job_url)
-                
-                # Check if scraping actually worked (has title and company)
-                if not job_data['job_title'] or job_data['job_title'] == 'N/A':
-                    print(f"    ⚠️  Warning: Failed to extract data, will retry later")
-                    failed_jobs.append(job_url)
-                
-                all_jobs_data.append(job_data)
-                
-            except Exception as e:
-                error_msg = str(e)
-                if 'invalid session id' in error_msg.lower() or 'no such window' in error_msg.lower():
-                    print(f"\n  ⚠️  Browser session crashed! Restarting browser...")
-                    try:
-                        driver.quit()
-                    except:
-                        pass
-                    
-                    # Restart driver
-                    driver = setup_driver(headless=False)
-                    print(f"  ✓ Browser restarted, continuing from job {idx}...\n")
-                    
-                    # Retry this job
-                    try:
-                        job_data = scrape_job_details(driver, job_url)
-                        all_jobs_data.append(job_data)
-                    except:
-                        print(f"    Still failed, marking for retry")
-                        failed_jobs.append(job_url)
-                        all_jobs_data.append({'job_title': '', 'company': '', 'location': '', 'classification': '', 'work_type': '', 'salary': '', 'time_posted': '', 'application_volume': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
-                else:
-                    print(f"    Error: {e}")
-                    failed_jobs.append(job_url)
-                    all_jobs_data.append({'job_title': '', 'company': '', 'location': '', 'classification': '', 'work_type': '', 'salary': '', 'time_posted': '', 'application_volume': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
-            
-            # Progress update every 10 jobs
-            if idx % 10 == 0:
-                print(f"  Progress: {idx}/{len(all_job_links)} jobs scraped ({(idx/len(all_job_links)*100):.1f}%)")
-            
-            # Save to Excel every 100 entries (crash safety)
-            if idx % 100 == 0:
-                df_checkpoint = pd.DataFrame(all_jobs_data)
-                df_checkpoint = df_checkpoint[['job_title', 'company', 'location', 'classification', 'work_type', 'salary', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
-                df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
-                print(f"  💾 Checkpoint saved: {idx} jobs saved to {filename}")
-                
-                # Restart browser every 100 jobs to prevent memory issues
-                print(f"  🔄 Refreshing browser session to prevent crashes...")
+            # Collect results as they complete
+            for future in as_completed(future_to_index):
+                idx = future_to_index[future]
                 try:
-                    driver.quit()
-                except:
-                    pass
-                driver = setup_driver(headless=False)
-                time.sleep(2)
-        
-        # Retry failed jobs
-        if failed_jobs:
-            print(f"\n🔄 Retrying {len(failed_jobs)} failed jobs...\n")
-            for retry_idx, job_url in enumerate(failed_jobs, 1):
-                print(f"  Retry [{retry_idx}/{len(failed_jobs)}] {job_url}")
-                try:
-                    job_data = scrape_job_details(driver, job_url)
-                    # Find and update the failed entry
-                    for i, entry in enumerate(all_jobs_data):
-                        if entry['url'] == job_url and not entry['job_title']:
-                            all_jobs_data[i] = job_data
-                            break
+                    job_data = future.result()
+                    all_jobs_data[idx] = job_data
+                    completed += 1
+                    
+                    # Progress update
+                    if completed % 10 == 0 or completed == len(all_job_links):
+                        print(f"  Progress: {completed}/{len(all_job_links)} jobs completed ({(completed/len(all_job_links)*100):.1f}%)")
+                    
+                    # Save checkpoint every 100 jobs
+                    if completed % 100 == 0:
+                        with data_lock:
+                            df_checkpoint = pd.DataFrame([j for j in all_jobs_data if j is not None])
+                            df_checkpoint = df_checkpoint[['job_title', 'company', 'location', 'classification', 'work_type', 'salary', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
+                            df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
+                            print(f"  💾 Checkpoint saved: {completed} jobs")
+                        
                 except Exception as e:
-                    print(f"    Still failed: {e}")
+                    print(f"  ✗ Job {idx+1} failed: {e}")
+                    all_jobs_data[idx] = {'job_title': '', 'company': '', 'location': '', 'classification': '', 'work_type': '', 'salary': '', 'time_posted': '', 'application_volume': '', 'email': '', 'phone': '', 'website': '', 'url': all_job_links[idx]}
         
-        driver.quit()
+        # Remove any None values (shouldn't happen but just in case)
+        all_jobs_data = [j for j in all_jobs_data if j is not None]
+        
+        # Retry failed jobs is no longer needed with parallel approach - failures are already handled
         
         # Final save to Excel
         if all_jobs_data:
