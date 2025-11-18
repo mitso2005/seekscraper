@@ -18,6 +18,12 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
         driver = setup_driver(headless=headless)
         job_data = scrape_job_details(driver, job_url)
         driver.quit()
+        
+        # Check if job was filtered (recruitment company)
+        if job_data is None:
+            print(f"  🚫 [Job #{job_num}] Filtered (recruitment company)")
+            return None
+        
         print(f"  ✓ [Job #{job_num}] Completed")
         return job_data
     except Exception as e:

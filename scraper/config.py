@@ -33,3 +33,38 @@ INVALID_DOMAINS = [
     'ogp.me', 'schema.org', 'w3.org', 'xmlns.com', 'example.com',
     'facebook.com/sharer', 'twitter.com/intent', 'linkedin.com/sharing'
 ]
+
+# Recruitment companies to filter out (case-insensitive matching)
+RECRUITMENT_COMPANIES = [
+    'Hays Technology',
+    'Hays',
+    'Robert Half Technology',
+    'Robert Half',
+    'Michael Page Technology',
+    'Michael Page',
+    'Paxus',
+    'Talent International',
+    'Peoplebank',
+    'Finite IT',
+    'Greythorn',
+    'Halcyon Knights',
+    'Lanson Partners',
+    'Ignite',
+    'Morgan McKinley Technology',
+    'Morgan McKinley',
+    'Clicks IT Recruitment',
+    'Clicks IT',
+    'Ambition Technology',
+    'Ambition',
+    'Davidson Technology',
+    'Davidson',
+    'Charterhouse IT',
+    'Charterhouse',
+    'Sirius Technology',
+    'Sirius',
+    'Bluefin Resources',
+    'Bluefin',
+    'Hudson Australia',
+    'Hudson',
+    'Expert360'
+]

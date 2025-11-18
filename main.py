@@ -79,16 +79,19 @@ def main():
         
         # Scrape jobs in parallel
         print(f"\n⚡ Scraping {len(all_job_links)} jobs using {num_workers} parallel browser(s)...")
-        print("(Much faster with parallel processing!)\n")
+        print("(Much faster with parallel processing!)")
+        print("🚫 Filtering out recruitment companies...\n")
         
+        total_processed = len(all_job_links)
         all_jobs_data = scrape_jobs_in_parallel(all_job_links, start_job, num_workers, filename)
+        filtered_count = total_processed - len(all_jobs_data)
         
         # Save final results
         if all_jobs_data:
             df = save_to_excel(all_jobs_data, filename)
-            print_statistics(df, filename)
+            print_statistics(df, filename, total_processed, filtered_count)
         else:
-            print("\nNo jobs were scraped. Please check the search criteria or website structure.")
+            print_statistics(None, None, total_processed, filtered_count)
     
     except KeyboardInterrupt:
         print("\n\n⚠️  Scraping interrupted by user.")

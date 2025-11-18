@@ -38,10 +38,25 @@ def save_to_excel(all_jobs_data, filename):
     return df
 
 
-def print_statistics(df, filename):
-    """Print scraping statistics."""
+def print_statistics(df, filename, total_processed=None, filtered_count=0):
+    """
+    Print scraping statistics.
+    
+    Args:
+        df: DataFrame of scraped jobs
+        filename: Output filename
+        total_processed: Total number of jobs processed (including filtered)
+        filtered_count: Number of jobs filtered out (recruitment companies)
+    """
     if df is None or df.empty:
-        print("\nNo jobs were scraped. Please check the search criteria or website structure.")
+        if filtered_count > 0:
+            print("\n" + "=" * 60)
+            print("⚠️  All jobs were filtered out (recruitment companies)")
+            print(f"Total jobs processed: {total_processed}")
+            print(f"Jobs filtered (recruitment companies): {filtered_count}")
+            print("=" * 60)
+        else:
+            print("\nNo jobs were scraped. Please check the search criteria or website structure.")
         return
     
     successful_scrapes = df[df['job_title'].notna() & (df['job_title'] != '') & (df['job_title'] != 'N/A')].shape[0]
@@ -49,7 +64,14 @@ def print_statistics(df, filename):
     
     print("\n" + "=" * 60)
     print(f"✅ SUCCESS! Data exported to: {filename}")
-    print(f"Total jobs scraped: {len(df)}")
+    
+    if total_processed and filtered_count > 0:
+        print(f"Total jobs processed: {total_processed}")
+        print(f"Jobs filtered (recruitment companies): {filtered_count}")
+        print(f"Jobs saved to Excel: {len(df)}")
+    else:
+        print(f"Total jobs scraped: {len(df)}")
+    
     print(f"Successfully extracted: {successful_scrapes}")
     print(f"Failed to extract: {failed_scrapes}")
     print(f"Jobs with email: {df['email'].astype(bool).sum()}")

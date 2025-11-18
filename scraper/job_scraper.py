@@ -4,7 +4,7 @@ import time
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from .config import BRIEF_PAUSE, ELEMENT_WAIT_TIMEOUT, COLUMNS
+from .config import BRIEF_PAUSE, ELEMENT_WAIT_TIMEOUT, COLUMNS, RECRUITMENT_COMPANIES
 from .extractors import extract_contact_info
 
 
@@ -148,6 +148,23 @@ def extract_contact_details(driver):
         return {'email': '', 'phone': '', 'website': ''}
 
 
+def is_recruitment_company(company_name):
+    """
+    Check if the company is a recruitment agency.
+    Returns True if company matches any recruitment company (case-insensitive).
+    """
+    if not company_name or company_name == 'N/A':
+        return False
+    
+    company_lower = company_name.lower().strip()
+    
+    for recruiter in RECRUITMENT_COMPANIES:
+        if recruiter.lower() in company_lower:
+            return True
+    
+    return False
+
+
 def scrape_job_details(driver, job_url):
     """Scrape all job details from a given job URL."""
     job_data = create_empty_job_data(job_url)
@@ -167,6 +184,11 @@ def scrape_job_details(driver, job_url):
         # Extract all fields
         job_data['job_title'] = extract_job_title(driver)
         job_data['company'] = extract_company(driver)
+        
+        # Check if this is a recruitment company - return None to skip this job
+        if is_recruitment_company(job_data['company']):
+            return None
+        
         job_data['location'] = extract_location(driver)
         job_data['classification'] = extract_classification(driver)
         job_data['work_type'] = extract_work_type(driver)
