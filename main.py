@@ -214,6 +214,11 @@ def scrape_job_details(driver, job_url, retry_count=0, max_retries=3):
     job_data = {
         'job_title': '',
         'company': '',
+        'location': '',
+        'classification': '',
+        'work_type': '',
+        'time_posted': '',
+        'application_volume': '',
         'email': '',
         'phone': '',
         'website': '',
@@ -247,6 +252,68 @@ def scrape_job_details(driver, job_url, retry_count=0, max_retries=3):
                 job_data['company'] = company_element.text.strip()
             except:
                 job_data['company'] = 'N/A'
+        
+        # Extract location
+        try:
+            location_element = driver.find_element(By.CSS_SELECTOR, '[data-automation="job-detail-location"]')
+            job_data['location'] = location_element.text.strip()
+        except:
+            try:
+                location_element = driver.find_element(By.CSS_SELECTOR, 'span[data-automation="job-detail-location"]')
+                job_data['location'] = location_element.text.strip()
+            except:
+                job_data['location'] = ''
+        
+        # Extract classification
+        try:
+            classification_element = driver.find_element(By.CSS_SELECTOR, '[data-automation="job-detail-classifications"]')
+            job_data['classification'] = classification_element.text.strip()
+        except:
+            try:
+                classification_element = driver.find_element(By.CSS_SELECTOR, 'a[data-automation="job-detail-classifications"]')
+                job_data['classification'] = classification_element.text.strip()
+            except:
+                job_data['classification'] = ''
+        
+        # Extract work type
+        try:
+            work_type_element = driver.find_element(By.CSS_SELECTOR, '[data-automation="job-detail-work-type"]')
+            job_data['work_type'] = work_type_element.text.strip()
+        except:
+            try:
+                work_type_element = driver.find_element(By.CSS_SELECTOR, 'span[data-automation="job-detail-work-type"]')
+                job_data['work_type'] = work_type_element.text.strip()
+            except:
+                job_data['work_type'] = ''
+        
+        # Extract time posted (looking for "Posted X ago" pattern)
+        try:
+            time_elements = driver.find_elements(By.CSS_SELECTOR, '._1i38d6g0.dk7b5050.h9jxny0.h9jxny1.h9jxny1u.h9jxny6._1lwlriv4')
+            for element in time_elements:
+                text = element.text.strip()
+                # Look for "Posted" keyword specifically
+                if text and text.lower().startswith('posted'):
+                    job_data['time_posted'] = text
+                    break
+        except:
+            try:
+                # Fallback: look for common time posted patterns
+                time_element = driver.find_element(By.CSS_SELECTOR, '[data-automation="job-detail-date"]')
+                job_data['time_posted'] = time_element.text.strip()
+            except:
+                job_data['time_posted'] = ''
+        
+        # Extract application volume (looking for "volume" keyword)
+        try:
+            volume_elements = driver.find_elements(By.CSS_SELECTOR, '._1i38d6g0.dk7b5050.h9jxny0.h9jxny1.h9jxny1u.h9jxny6._1lwlriv4')
+            for element in volume_elements:
+                text = element.text.strip()
+                # Look for "volume" keyword (e.g., "Medium application volume", "High application volume")
+                if text and 'volume' in text.lower():
+                    job_data['application_volume'] = text
+                    break
+        except:
+            job_data['application_volume'] = ''
         
         # Extract job description and contact info - ONLY from job description, not entire page
         try:
@@ -447,11 +514,11 @@ def main():
                     except:
                         print(f"    Still failed, marking for retry")
                         failed_jobs.append(job_url)
-                        all_jobs_data.append({'job_title': '', 'company': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
+                        all_jobs_data.append({'job_title': '', 'company': '', 'location': '', 'classification': '', 'work_type': '', 'time_posted': '', 'application_volume': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
                 else:
                     print(f"    Error: {e}")
                     failed_jobs.append(job_url)
-                    all_jobs_data.append({'job_title': '', 'company': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
+                    all_jobs_data.append({'job_title': '', 'company': '', 'location': '', 'classification': '', 'work_type': '', 'time_posted': '', 'application_volume': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
             
             # Progress update every 10 jobs
             if idx % 10 == 0:
@@ -460,7 +527,7 @@ def main():
             # Save to Excel every 100 entries (crash safety)
             if idx % 100 == 0:
                 df_checkpoint = pd.DataFrame(all_jobs_data)
-                df_checkpoint = df_checkpoint[['job_title', 'company', 'email', 'phone', 'website', 'url']]
+                df_checkpoint = df_checkpoint[['job_title', 'company', 'location', 'classification', 'work_type', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
                 df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
                 print(f"  💾 Checkpoint saved: {idx} jobs saved to {filename}")
                 
@@ -494,7 +561,7 @@ def main():
         if all_jobs_data:
             df = pd.DataFrame(all_jobs_data)
             # Reorder columns
-            df = df[['job_title', 'company', 'email', 'phone', 'website', 'url']]
+            df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
             
             df.to_excel(filename, index=False, engine='openpyxl')
             
@@ -520,7 +587,7 @@ def main():
         if all_jobs_data:
             try:
                 df = pd.DataFrame(all_jobs_data)
-                df = df[['job_title', 'company', 'email', 'phone', 'website', 'url']]
+                df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"seek_ict_jobs_melbourne_interrupted_{timestamp}.xlsx"
                 df.to_excel(filename, index=False, engine='openpyxl')
@@ -535,7 +602,7 @@ def main():
         if all_jobs_data:
             try:
                 df = pd.DataFrame(all_jobs_data)
-                df = df[['job_title', 'company', 'email', 'phone', 'website', 'url']]
+                df = df[['job_title', 'company', 'location', 'classification', 'work_type', 'time_posted', 'application_volume', 'email', 'phone', 'website', 'url']]
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"seek_ict_jobs_melbourne_error_{timestamp}.xlsx"
                 df.to_excel(filename, index=False, engine='openpyxl')
