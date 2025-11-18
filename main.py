@@ -204,7 +204,7 @@ def extract_contact_info(text):
         'website': websites[0] if websites else ''
     }
 
-def scrape_job_details(driver, job_url):
+def scrape_job_details(driver, job_url, retry_count=0, max_retries=3):
     """Scrape job details from a given job URL."""
     job_data = {
         'job_title': '',
@@ -259,7 +259,12 @@ def scrape_job_details(driver, job_url):
         # Don't extract from page source - it causes false positives from meta tags
             
     except Exception as e:
-        print(f"Error scraping {job_url}: {e}")
+        error_msg = str(e)
+        if 'invalid session id' in error_msg.lower() or 'session' in error_msg.lower():
+            # Browser session died - raise to trigger recovery
+            raise
+        else:
+            print(f"Error scraping {job_url}: {e}")
     
     return job_data
 
@@ -367,32 +372,107 @@ def main():
         print("\nScraping individual job details...")
         print("(This may take a while - approximately 3-5 seconds per job)\n")
         
+        # Create filename at the start
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"seek_ict_jobs_melbourne_{timestamp}.xlsx"
+        
+        # Track failed jobs for retry
+        failed_jobs = []
+        
         # Scrape each job
         for idx, job_url in enumerate(all_job_links, 1):
             print(f"  [{idx}/{len(all_job_links)}] Scraping job...")
-            job_data = scrape_job_details(driver, job_url)
-            all_jobs_data.append(job_data)
+            
+            try:
+                job_data = scrape_job_details(driver, job_url)
+                
+                # Check if scraping actually worked (has title and company)
+                if not job_data['job_title'] or job_data['job_title'] == 'N/A':
+                    print(f"    ⚠️  Warning: Failed to extract data, will retry later")
+                    failed_jobs.append(job_url)
+                
+                all_jobs_data.append(job_data)
+                
+            except Exception as e:
+                error_msg = str(e)
+                if 'invalid session id' in error_msg.lower() or 'no such window' in error_msg.lower():
+                    print(f"\n  ⚠️  Browser session crashed! Restarting browser...")
+                    try:
+                        driver.quit()
+                    except:
+                        pass
+                    
+                    # Restart driver
+                    driver = setup_driver(headless=False)
+                    print(f"  ✓ Browser restarted, continuing from job {idx}...\n")
+                    
+                    # Retry this job
+                    try:
+                        job_data = scrape_job_details(driver, job_url)
+                        all_jobs_data.append(job_data)
+                    except:
+                        print(f"    Still failed, marking for retry")
+                        failed_jobs.append(job_url)
+                        all_jobs_data.append({'job_title': '', 'company': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
+                else:
+                    print(f"    Error: {e}")
+                    failed_jobs.append(job_url)
+                    all_jobs_data.append({'job_title': '', 'company': '', 'email': '', 'phone': '', 'website': '', 'url': job_url})
             
             # Progress update every 10 jobs
             if idx % 10 == 0:
                 print(f"  Progress: {idx}/{len(all_job_links)} jobs scraped ({(idx/len(all_job_links)*100):.1f}%)")
+            
+            # Save to Excel every 100 entries (crash safety)
+            if idx % 100 == 0:
+                df_checkpoint = pd.DataFrame(all_jobs_data)
+                df_checkpoint = df_checkpoint[['job_title', 'company', 'email', 'phone', 'website', 'url']]
+                df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
+                print(f"  💾 Checkpoint saved: {idx} jobs saved to {filename}")
+                
+                # Restart browser every 100 jobs to prevent memory issues
+                print(f"  🔄 Refreshing browser session to prevent crashes...")
+                try:
+                    driver.quit()
+                except:
+                    pass
+                driver = setup_driver(headless=False)
+                time.sleep(2)
+        
+        # Retry failed jobs
+        if failed_jobs:
+            print(f"\n🔄 Retrying {len(failed_jobs)} failed jobs...\n")
+            for retry_idx, job_url in enumerate(failed_jobs, 1):
+                print(f"  Retry [{retry_idx}/{len(failed_jobs)}] {job_url}")
+                try:
+                    job_data = scrape_job_details(driver, job_url)
+                    # Find and update the failed entry
+                    for i, entry in enumerate(all_jobs_data):
+                        if entry['url'] == job_url and not entry['job_title']:
+                            all_jobs_data[i] = job_data
+                            break
+                except Exception as e:
+                    print(f"    Still failed: {e}")
         
         driver.quit()
         
-        # Export to Excel
+        # Final save to Excel
         if all_jobs_data:
             df = pd.DataFrame(all_jobs_data)
             # Reorder columns
             df = df[['job_title', 'company', 'email', 'phone', 'website', 'url']]
             
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"seek_ict_jobs_melbourne_{timestamp}.xlsx"
-            
             df.to_excel(filename, index=False, engine='openpyxl')
+            
+            # Calculate statistics
+            successful_scrapes = df[df['job_title'].notna() & (df['job_title'] != '') & (df['job_title'] != 'N/A')].shape[0]
+            failed_scrapes = len(all_jobs_data) - successful_scrapes
             
             print("\n" + "=" * 60)
             print(f"✅ SUCCESS! Data exported to: {filename}")
             print(f"Total jobs scraped: {len(all_jobs_data)}")
+            print(f"Successfully extracted: {successful_scrapes}")
+            print(f"Failed to extract: {failed_scrapes}")
             print(f"Jobs with email: {df['email'].astype(bool).sum()}")
             print(f"Jobs with phone: {df['phone'].astype(bool).sum()}")
             print(f"Jobs with website: {df['website'].astype(bool).sum()}")
@@ -401,11 +481,33 @@ def main():
             print("\nNo jobs were scraped. Please check the search criteria or website structure.")
     
     except KeyboardInterrupt:
-        print("\n\nScraping interrupted by user.")
+        print("\n\n⚠️  Scraping interrupted by user.")
+        # Save whatever data we have so far
+        if all_jobs_data:
+            try:
+                df = pd.DataFrame(all_jobs_data)
+                df = df[['job_title', 'company', 'email', 'phone', 'website', 'url']]
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"seek_ict_jobs_melbourne_interrupted_{timestamp}.xlsx"
+                df.to_excel(filename, index=False, engine='openpyxl')
+                print(f"💾 Partial data saved to: {filename} ({len(all_jobs_data)} jobs)")
+            except Exception as save_error:
+                print(f"Could not save partial data: {save_error}")
         if driver:
             driver.quit()
     except Exception as e:
-        print(f"\nError during scraping: {e}")
+        print(f"\n❌ Error during scraping: {e}")
+        # Save whatever data we have so far
+        if all_jobs_data:
+            try:
+                df = pd.DataFrame(all_jobs_data)
+                df = df[['job_title', 'company', 'email', 'phone', 'website', 'url']]
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"seek_ict_jobs_melbourne_error_{timestamp}.xlsx"
+                df.to_excel(filename, index=False, engine='openpyxl')
+                print(f"💾 Partial data saved to: {filename} ({len(all_jobs_data)} jobs)")
+            except Exception as save_error:
+                print(f"Could not save partial data: {save_error}")
         if driver:
             driver.quit()
         raise
