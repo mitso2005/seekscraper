@@ -40,12 +40,17 @@ def setup_driver(headless=False):
         print(f"Error initializing the WebDriver: {e}")
         exit()
 
-def build_search_url():
+def build_search_url(sort_by_date=False):
     """Build the Seek URL for ICT jobs in All Melbourne VIC."""
     # Seek URL structure for classification and location filters
     # Classification: Information & Communication Technology (ID: 6281)
     # Location: All Melbourne VIC (ID: 3000)
     base_url = "https://www.seek.com.au/information-communication-technology-jobs/in-All-Melbourne-VIC"
+    
+    # Add sort parameter for newest first
+    if sort_by_date:
+        base_url += "?sortmode=ListedDate"
+    
     return base_url
 
 def get_total_jobs(driver):
@@ -274,19 +279,14 @@ def main():
     print("=" * 60)
     print("\nNOTE: This scraper is for educational purposes only.")
     
-    # Ask user how many pages to scrape
+    # Ask if user wants to sort by newest first
     while True:
-        pages_input = input("\nHow many pages would you like to scrape? (each page ~22 jobs, enter number or 'all'): ").strip().lower()
-        if pages_input == 'all':
-            max_pages_to_scrape = None
-            print("Will scrape ALL available pages.")
-            break
-        elif pages_input.isdigit() and int(pages_input) > 0:
-            max_pages_to_scrape = int(pages_input)
-            print(f"Will scrape up to {max_pages_to_scrape} pages (~{max_pages_to_scrape * 22} jobs).")
+        sort_input = input("\nSort by newest jobs first? (y/n): ").strip().lower()
+        if sort_input in ['y', 'n']:
+            sort_by_date = (sort_input == 'y')
             break
         else:
-            print("Invalid input. Please enter a positive number or 'all'.")
+            print("Invalid input. Please enter 'y' or 'n'.")
     
     print("\nInitializing...\n")
     
@@ -296,7 +296,7 @@ def main():
     
     try:
         # Navigate to the search page
-        search_url = build_search_url()
+        search_url = build_search_url(sort_by_date=sort_by_date)
         print(f"Navigating to: {search_url}\n")
         driver.get(search_url)
         
@@ -306,7 +306,7 @@ def main():
         
         # Get total jobs available
         total_jobs = get_total_jobs(driver)
-        print(f"Total ICT jobs in All Melbourne VIC: {total_jobs}")
+        print(f"\n📊 Total ICT jobs available: {total_jobs}")
         
         if total_jobs == 0:
             print("\n⚠️  Could not detect jobs on the page.")
@@ -316,6 +316,36 @@ def main():
             print("  3. The URL is correct")
             print("\nPress Enter to continue with link extraction anyway, or Ctrl+C to quit...")
             input()
+            total_jobs = 9999  # Fallback if can't detect
+        
+        # Ask user which jobs to scrape
+        start_job = 1
+        end_job = total_jobs
+        
+        while True:
+            range_input = input(f"\nWhich jobs to scrape? (e.g., '1-100', '50-250', or 'all' for all {total_jobs}): ").strip().lower()
+            
+            if range_input == 'all':
+                start_job = 1
+                end_job = total_jobs
+                print(f"Will scrape ALL jobs (1 to {total_jobs})")
+                break
+            elif '-' in range_input:
+                try:
+                    parts = range_input.split('-')
+                    start_job = int(parts[0].strip())
+                    end_job = int(parts[1].strip())
+                    
+                    if start_job < 1 or end_job > total_jobs or start_job > end_job:
+                        print(f"Invalid range. Must be between 1 and {total_jobs}, with start <= end.")
+                        continue
+                    
+                    print(f"Will scrape jobs {start_job} to {end_job} ({end_job - start_job + 1} jobs)")
+                    break
+                except ValueError:
+                    print("Invalid format. Use format like '1-100' or 'all'.")
+            else:
+                print("Invalid input. Enter a range like '1-100' or 'all'.")
         
         # Collect job links from all pages
         all_job_links = []
@@ -325,14 +355,9 @@ def main():
         
         # Determine stopping condition
         while True:
-            # Check if we've reached the page limit
-            if max_pages_to_scrape is not None and page_num > max_pages_to_scrape:
-                print(f"  Reached requested page limit ({max_pages_to_scrape} pages).")
-                break
-            
-            # Check if we've collected all jobs
-            if total_jobs > 0 and len(all_job_links) >= total_jobs:
-                print(f"  Collected all {total_jobs} available jobs.")
+            # Check if we've collected enough jobs to cover the range
+            if len(all_job_links) >= end_job:
+                print(f"  Collected enough jobs to cover range (up to job {end_job}).")
                 break
             
             print(f"  Scraping page {page_num}... (collected {len(all_job_links)} links so far)")
@@ -369,6 +394,14 @@ def main():
             driver.quit()
             return
         
+        # Filter to only the requested range (accounting for 0-based indexing)
+        if end_job < len(all_job_links):
+            all_job_links = all_job_links[start_job-1:end_job]
+        elif start_job > 1:
+            all_job_links = all_job_links[start_job-1:]
+        
+        print(f"Selected range: {len(all_job_links)} jobs (from job {start_job} to job {min(end_job, start_job + len(all_job_links) - 1)})")
+        
         print("\nScraping individual job details...")
         print("(This may take a while - approximately 3-5 seconds per job)\n")
         
@@ -381,7 +414,8 @@ def main():
         
         # Scrape each job
         for idx, job_url in enumerate(all_job_links, 1):
-            print(f"  [{idx}/{len(all_job_links)}] Scraping job...")
+            absolute_job_num = start_job + idx - 1
+            print(f"  [Job #{absolute_job_num}] [{idx}/{len(all_job_links)}] Scraping...")
             
             try:
                 job_data = scrape_job_details(driver, job_url)
