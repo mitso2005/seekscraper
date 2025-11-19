@@ -6,15 +6,17 @@ roles in the Melbourne area, extracting detailed information including contact d
 """
 
 import time
+import signal
+import sys
 from scraper.driver_setup import setup_driver
 from scraper.url_builder import build_search_url
 from scraper.page_parser import get_total_jobs
 from scraper.link_collector import collect_job_links, filter_job_range
 from scraper.parallel_scraper import scrape_jobs_in_parallel
-from scraper.streaming_parallel_scraper import scrape_jobs_streaming
+from scraper.streaming_parallel_scraper import scrape_jobs_streaming, cleanup_all_browsers
 from scraper.user_input import get_sort_preference, get_parallel_workers, get_job_range, get_scraping_mode
 from scraper.data_export import create_filename, save_to_excel, print_statistics, save_partial_data
-from scraper.config import ENABLE_GOOGLE_ENRICHMENT
+from scraper.config import ENABLE_GOOGLE_ENRICHMENT, CHECKPOINT_INTERVAL
 
 def main():
     """Main execution function."""
@@ -35,6 +37,9 @@ def main():
     
     driver = setup_driver(headless=True)
     all_jobs_data = []
+    filename = None
+    total_processed = 0
+    filtered_count = 0
     
     try:
         # Navigate to search page
@@ -74,16 +79,8 @@ def main():
         if use_streaming:
             # Streaming mode - scrape while collecting links
             print("🚀 Starting streaming scrape (links processed as found)...\n")
-            all_jobs_data, all_job_links = scrape_jobs_streaming(driver, end_job, start_job, num_workers, filename)
-            
-            # Filter to requested range
-            if start_job > 1 or end_job < len(all_job_links):
-                # Need to filter the results
-                filtered_links = filter_job_range(all_job_links, start_job, end_job)
-                # Only keep jobs that match the filtered URLs
-                filtered_urls_set = set(filtered_links)
-                all_jobs_data = [job for job in all_jobs_data if job.get('url') in filtered_urls_set]
-                print(f"\n📌 Applied job range filter: {len(all_jobs_data)} jobs (from job {start_job} to job {min(end_job, len(all_job_links))})")
+            # Pass start_job and end_job to streaming scraper so it filters correctly
+            all_jobs_data, all_job_links = scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename)
             
             total_processed = len(all_job_links)
             filtered_count = total_processed - len(all_jobs_data)
@@ -120,12 +117,45 @@ def main():
             print_statistics(None, None, total_processed, filtered_count)
     
     except KeyboardInterrupt:
-        print("\n\n⚠️  Scraping interrupted by user.")
-        save_partial_data(all_jobs_data, interrupted=True)
+        print("\n\n⚠️  Scraping interrupted by user. Shutting down all browsers...")
+        cleanup_all_browsers()  # Kill all parallel browser instances
+        print("🛑 All browsers terminated.")
+        print(f"\nAttempting to save {len(all_jobs_data)} jobs collected so far...")
+        if all_jobs_data and filename:
+            try:
+                df = save_to_excel(all_jobs_data, filename)
+                print(f"\n✅ Partial data saved to: {filename}")
+                print(f"   Jobs saved: {len(all_jobs_data)}")
+            except Exception as e:
+                print(f"❌ Error saving partial data: {e}")
+        elif filename:
+            # Check if checkpoint file exists
+            import os
+            if os.path.exists(filename):
+                print(f"\n💾 Checkpoint file already exists: {filename}")
+                print(f"   Your data was saved during the last checkpoint (every {CHECKPOINT_INTERVAL} jobs)")
+                # Count jobs in checkpoint
+                try:
+                    import pandas as pd
+                    df_check = pd.read_excel(filename)
+                    print(f"   Jobs in checkpoint: {len(df_check)}")
+                except:
+                    pass
+            else:
+                print("\n⚠️  No data collected yet in this session.")
+        else:
+            print("\n⚠️  No data to save (scraping hadn't started yet)")
+        sys.exit(0)
     
     except Exception as e:
         print(f"\n❌ Error during scraping: {e}")
-        save_partial_data(all_jobs_data, interrupted=False)
+        if all_jobs_data and filename:
+            print(f"Attempting to save {len(all_jobs_data)} jobs before exit...")
+            try:
+                df = save_to_excel(all_jobs_data, filename)
+                print(f"✅ Partial data saved to: {filename}")
+            except:
+                pass
         raise
 
 if __name__ == "__main__":

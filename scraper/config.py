@@ -6,9 +6,9 @@ LOCATION = "All-Melbourne-VIC"
 BASE_URL = "https://www.seek.com.au"
 
 # Scraping settings
-DEFAULT_WORKERS = 8  # Increased from 5 for faster scraping
-MAX_WORKERS = 15  # Increased from 10 - adjust based on your RAM
-CHECKPOINT_INTERVAL = 100
+DEFAULT_WORKERS = 12  # Optimized for Ryzen 7 PRO 7840U (8 cores/16 threads)
+MAX_WORKERS = 20  # With 32GB RAM, you can handle more
+CHECKPOINT_INTERVAL = 50  # Save checkpoint every 50 jobs (reduced from 100 for better safety)
 MAX_PAGES = 100
 
 # Timeout settings (in seconds)

@@ -3,17 +3,42 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 import pandas as pd
+import signal
 from .driver_setup import setup_driver
 from .job_scraper import scrape_job_details, create_empty_job_data
 from .google_enrichment import search_google_business_phone
-from .config import COLUMNS, ENABLE_GOOGLE_ENRICHMENT
+from .config import COLUMNS, ENABLE_GOOGLE_ENRICHMENT, CHECKPOINT_INTERVAL
 from .streaming_collector import stream_job_links
+from .link_collector import filter_job_range
+from .resume_manager import ResumeManager
 
 # Thread-safe lock for data collection
 data_lock = Lock()
 # Cache for company phone numbers (thread-safe)
 company_phone_cache = {}
 cache_lock = Lock()
+# Global executor for cleanup
+current_executor = None
+active_drivers = []
+drivers_lock = Lock()
+
+
+def cleanup_all_browsers():
+    """Force cleanup of all active browser instances."""
+    global current_executor, active_drivers
+    
+    # Shutdown executor
+    if current_executor:
+        current_executor.shutdown(wait=False, cancel_futures=True)
+    
+    # Close all active drivers
+    with drivers_lock:
+        for driver in active_drivers:
+            try:
+                driver.quit()
+            except:
+                pass
+        active_drivers.clear()
 
 
 def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
@@ -21,6 +46,11 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
     driver = None
     try:
         driver = setup_driver(headless=headless)
+        
+        # Track driver globally for cleanup
+        with drivers_lock:
+            active_drivers.append(driver)
+        
         job_data = scrape_job_details(driver, job_url)
         
         # If job was not filtered and Google enrichment is enabled, get office phone
@@ -41,6 +71,11 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
         
         driver.quit()
         
+        # Remove from active list
+        with drivers_lock:
+            if driver in active_drivers:
+                active_drivers.remove(driver)
+        
         # Check if job was filtered
         if job_data is None:
             print(f"  🚫 [Job #{job_num}] Filtered")
@@ -54,33 +89,44 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
         if driver:
             try:
                 driver.quit()
+                with drivers_lock:
+                    if driver in active_drivers:
+                        active_drivers.remove(driver)
             except:
                 pass
         print(f"  ✗ [Job #{job_num}] Failed: {e}")
         return create_empty_job_data(job_url)
 
 
-def scrape_jobs_streaming(driver, end_job, start_job, num_workers, filename):
+def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename):
     """
     Scrape jobs using streaming approach - starts scraping while still collecting links.
+    Auto-resumes from checkpoint if available.
     
     Args:
         driver: Selenium WebDriver for link collection
-        end_job: Total number of jobs to collect
-        start_job: Starting job number for display
+        start_job: Starting job number (1-indexed) - e.g., 1050
+        end_job: Ending job number (inclusive) - e.g., 1550
         num_workers: Number of parallel browser instances
         filename: Output Excel filename
     
     Returns:
-        List of job data dictionaries
+        Tuple of (all_jobs_data, all_job_urls)
     """
+    global current_executor
+    
+    # Initialize resume manager
+    resume_mgr = ResumeManager(filename)
+    
     all_jobs_data = []
     all_job_urls = []
     completed = 0
     
     # Create thread pool for scraping
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        current_executor = executor
         futures = {}
+        job_index = 0
         
         # Stream links and submit jobs as we get them
         for batch_links in stream_job_links(driver, end_job):
@@ -88,14 +134,28 @@ def scrape_jobs_streaming(driver, end_job, start_job, num_workers, filename):
             
             # Submit this batch for scraping immediately
             for job_url in batch_links:
-                job_num = start_job + len(futures)
-                future = executor.submit(scrape_job_parallel, job_url, job_num, end_job, headless=True)
-                futures[future] = len(futures)
+                # Calculate actual job number (1-indexed position in ALL jobs)
+                current_job_num = len(all_job_urls) - len(batch_links) + job_index + 1
+                
+                # Only scrape if within requested range AND not already completed
+                if current_job_num >= start_job and current_job_num <= end_job:
+                    if not resume_mgr.is_completed(job_url):
+                        future = executor.submit(scrape_job_parallel, job_url, current_job_num, end_job, headless=True)
+                        futures[future] = len(futures)
+                    else:
+                        print(f"  ⏭️  [Job #{current_job_num}] Already completed (skipped)")
+                
+                job_index += 1
             
-            print(f"  ⚡ Submitted {len(batch_links)} jobs for scraping (total queued: {len(futures)})")
+            jobs_to_scrape = len(futures)
+            already_done = len(resume_mgr.completed_urls)
+            print(f"  ⚡ Batch collected. To scrape: {jobs_to_scrape}, Already done: {already_done}")
         
         # Close the search driver now that we're done collecting
-        print(f"\n✅ Link collection complete! {len(all_job_urls)} links found.")
+        print(f"\n✅ Link collection complete! {len(all_job_urls)} total links found.")
+        print(f"📌 Job range {start_job}-{end_job}: {len(futures)} jobs to scrape")
+        if len(resume_mgr.completed_urls) > 0:
+            print(f"♻️  Resuming: {len(resume_mgr.completed_urls)} jobs already completed")
         print(f"⚡ Scraping in progress with {num_workers} parallel browsers...\n")
         driver.quit()
         
@@ -112,30 +172,51 @@ def scrape_jobs_streaming(driver, end_job, start_job, num_workers, filename):
                 
                 # Progress update
                 if completed % 10 == 0 or completed == len(futures):
-                    print(f"  Progress: {completed}/{len(futures)} jobs completed ({(completed/len(futures)*100):.1f}%)")
+                    total_done = completed + len(resume_mgr.completed_urls)
+                    print(f"  Progress: {completed}/{len(futures)} jobs completed this session ({(completed/len(futures)*100):.1f}%) | Total: {total_done}")
                 
-                # Save checkpoint every 100 jobs
-                if completed % 100 == 0:
-                    save_checkpoint(all_jobs_data, filename)
-                    print(f"  💾 Checkpoint saved: {completed} jobs")
+                # Save checkpoint using CHECKPOINT_INTERVAL
+                if completed % CHECKPOINT_INTERVAL == 0:
+                    # Filter valid data
+                    valid_data = [j for j in all_jobs_data if j is not None]
+                    # Merge with existing checkpoint
+                    merged_data = resume_mgr.merge_with_existing(valid_data)
+                    # Save checkpoint
+                    df_checkpoint = pd.DataFrame(merged_data, columns=COLUMNS)
+                    df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
+                    # Save progress tracking
+                    resume_mgr.save_progress(valid_data)
+                    print(f"  💾 Checkpoint saved: {len(merged_data)} total jobs")
                     
             except Exception as e:
                 print(f"  ✗ Job {idx+1} failed: {e}")
-                all_jobs_data[idx] = create_empty_job_data(all_job_urls[idx])
+                if idx < len(all_job_urls):
+                    all_jobs_data[idx] = create_empty_job_data(all_job_urls[idx])
+    
+    current_executor = None
     
     # Remove any None values with progress feedback
     print("\n  📊 Processing scraped data...")
     all_jobs_data = [j for j in all_jobs_data if j is not None]
     
+    # Merge with existing data
+    final_data = resume_mgr.merge_with_existing(all_jobs_data)
+    
     # Report enrichment statistics if enabled
     if ENABLE_GOOGLE_ENRICHMENT:
-        phones_found = sum(1 for job in all_jobs_data if job.get('office_phone'))
+        phones_found = sum(1 for job in final_data if job.get('office_phone'))
         unique_companies = len(company_phone_cache)
-        print(f"  📞 Office phones found: {phones_found}/{len(all_jobs_data)} jobs ({unique_companies} unique companies)")
+        print(f"  📞 Office phones found: {phones_found}/{len(final_data)} jobs ({unique_companies} unique companies)")
     
-    print(f"  ✅ Data processing complete: {len(all_jobs_data)} jobs ready for export")
+    print(f"  ✅ Data processing complete: {len(final_data)} jobs ready for export")
     
-    return all_jobs_data, all_job_urls
+    # Cleanup progress file on successful completion
+    resume_mgr.cleanup_progress_file()
+    
+    # Return the URLs that were actually scraped
+    filtered_urls = filter_job_range(all_job_urls, start_job, end_job)
+    
+    return final_data, filtered_urls
 
 
 def save_checkpoint(all_jobs_data, filename):
