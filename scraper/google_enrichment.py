@@ -31,17 +31,17 @@ def search_google_business_phone(driver, company_name, location=''):
         
         # Navigate to Google
         driver.get("https://www.google.com")
-        time.sleep(1)
+        time.sleep(0.5)  # Reduced from 1 second
         
         # Find search box and enter query
         try:
-            search_box = WebDriverWait(driver, 5).until(
+            search_box = WebDriverWait(driver, 3).until(  # Reduced from 5 seconds
                 EC.presence_of_element_located((By.NAME, "q"))
             )
             search_box.clear()
             search_box.send_keys(query)
             search_box.send_keys(Keys.RETURN)
-            time.sleep(2)
+            time.sleep(1.5)  # Reduced from 2 seconds
         except:
             return ''
         

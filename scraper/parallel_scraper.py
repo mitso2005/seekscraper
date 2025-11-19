@@ -5,10 +5,14 @@ from threading import Lock
 import pandas as pd
 from .driver_setup import setup_driver
 from .job_scraper import scrape_job_details, create_empty_job_data
-from .config import COLUMNS
+from .google_enrichment import search_google_business_phone
+from .config import COLUMNS, ENABLE_GOOGLE_ENRICHMENT
 
 # Thread-safe lock for data collection
 data_lock = Lock()
+# Cache for company phone numbers (thread-safe)
+company_phone_cache = {}
+cache_lock = Lock()
 
 
 def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
@@ -17,14 +21,33 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
     try:
         driver = setup_driver(headless=headless)
         job_data = scrape_job_details(driver, job_url)
+        
+        # If job was not filtered and Google enrichment is enabled, get office phone
+        if job_data is not None and ENABLE_GOOGLE_ENRICHMENT:
+            company = job_data.get('company', '')
+            location = job_data.get('location', '')
+            
+            if company and company != 'N/A':
+                # Check cache first (thread-safe)
+                with cache_lock:
+                    if company in company_phone_cache:
+                        job_data['office_phone'] = company_phone_cache[company]
+                    else:
+                        # Not in cache, search Google (still using same driver)
+                        office_phone = search_google_business_phone(driver, company, location)
+                        job_data['office_phone'] = office_phone
+                        company_phone_cache[company] = office_phone
+        
         driver.quit()
         
-        # Check if job was filtered (recruitment company or not full-time)
+        # Check if job was filtered
         if job_data is None:
             print(f"  🚫 [Job #{job_num}] Filtered")
             return None
         
-        print(f"  ✓ [Job #{job_num}] Completed")
+        # Show office phone status
+        office_phone_status = "📞" if job_data.get('office_phone') else ""
+        print(f"  ✓ [Job #{job_num}] Completed {office_phone_status}")
         return job_data
     except Exception as e:
         if driver:
@@ -83,6 +106,13 @@ def scrape_jobs_in_parallel(job_urls, start_job, num_workers, filename):
     # Remove any None values with progress feedback
     print("\n  📊 Processing scraped data...")
     all_jobs_data = [j for j in all_jobs_data if j is not None]
+    
+    # Report enrichment statistics if enabled
+    if ENABLE_GOOGLE_ENRICHMENT:
+        phones_found = sum(1 for job in all_jobs_data if job.get('office_phone'))
+        unique_companies = len(company_phone_cache)
+        print(f"  📞 Office phones found: {phones_found}/{len(all_jobs_data)} jobs ({unique_companies} unique companies)")
+    
     print(f"  ✅ Data processing complete: {len(all_jobs_data)} jobs ready for export")
     
     return all_jobs_data
