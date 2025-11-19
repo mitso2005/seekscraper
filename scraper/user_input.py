@@ -23,6 +23,18 @@ def get_parallel_workers():
             print(f"Invalid input. Enter a number between 1 and {MAX_WORKERS}.")
 
 
+def get_scraping_mode():
+    """Ask user if they want to use streaming mode (faster initial start)."""
+    while True:
+        mode_input = input("\nUse streaming mode? (faster, scrapes while collecting links) (y/n, default: y): ").strip().lower()
+        if mode_input == '' or mode_input == 'y':
+            return True
+        elif mode_input == 'n':
+            return False
+        else:
+            print("Invalid input. Please enter 'y' or 'n'.")
+
+
 def get_job_range(total_jobs):
     """
     Ask user which jobs to scrape.

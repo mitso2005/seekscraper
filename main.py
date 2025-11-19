@@ -11,7 +11,8 @@ from scraper.url_builder import build_search_url
 from scraper.page_parser import get_total_jobs
 from scraper.link_collector import collect_job_links, filter_job_range
 from scraper.parallel_scraper import scrape_jobs_in_parallel
-from scraper.user_input import get_sort_preference, get_parallel_workers, get_job_range
+from scraper.streaming_parallel_scraper import scrape_jobs_streaming
+from scraper.user_input import get_sort_preference, get_parallel_workers, get_job_range, get_scraping_mode
 from scraper.data_export import create_filename, save_to_excel, print_statistics, save_partial_data
 from scraper.config import ENABLE_GOOGLE_ENRICHMENT
 
@@ -25,8 +26,11 @@ def main():
     # Get user preferences
     sort_by_date = get_sort_preference()
     num_workers = get_parallel_workers()
+    use_streaming = get_scraping_mode()
     
     print(f"\n⚡ Using {num_workers} parallel browser(s) for faster scraping!")
+    if use_streaming:
+        print("🚀 Streaming mode: Scraping starts immediately as links are found!")
     print("\nInitializing...\n")
     
     driver = setup_driver(headless=True)
@@ -59,36 +63,54 @@ def main():
         # Get job range from user
         start_job, end_job = get_job_range(total_jobs)
         
-        # Collect job links
-        all_job_links = collect_job_links(driver, end_job)
-        print(f"\nTotal job links collected: {len(all_job_links)}")
-        
-        if len(all_job_links) == 0:
-            print("\n❌ No jobs found. Exiting.")
-            driver.quit()
-            return
-        
-        # Filter to requested range
-        all_job_links = filter_job_range(all_job_links, start_job, end_job)
-        print(f"Selected range: {len(all_job_links)} jobs (from job {start_job} to job {min(end_job, start_job + len(all_job_links) - 1)})")
-        
-        # Close initial driver
-        driver.quit()
-        
         # Create filename
         filename = create_filename()
         
-        # Scrape jobs in parallel
-        print(f"\n⚡ Scraping {len(all_job_links)} jobs using {num_workers} parallel browser(s)...")
-        print("(Much faster with parallel processing!)")
-        
         google_status = "ON" if ENABLE_GOOGLE_ENRICHMENT else "OFF"
-        print(f"🚫 Filtering: recruitment companies + contract/temp + large companies (1000+ employees)...")
+        print(f"\n🚫 Filtering: recruitment companies + contract/temp + large companies (1000+ employees)...")
         print(f"📞 Google Business enrichment: {google_status}\n")
         
-        total_processed = len(all_job_links)
-        all_jobs_data = scrape_jobs_in_parallel(all_job_links, start_job, num_workers, filename)
-        filtered_count = total_processed - len(all_jobs_data)
+        # Choose scraping mode
+        if use_streaming:
+            # Streaming mode - scrape while collecting links
+            print("🚀 Starting streaming scrape (links processed as found)...\n")
+            all_jobs_data, all_job_links = scrape_jobs_streaming(driver, end_job, start_job, num_workers, filename)
+            
+            # Filter to requested range
+            if start_job > 1 or end_job < len(all_job_links):
+                # Need to filter the results
+                filtered_links = filter_job_range(all_job_links, start_job, end_job)
+                # Only keep jobs that match the filtered URLs
+                filtered_urls_set = set(filtered_links)
+                all_jobs_data = [job for job in all_jobs_data if job.get('url') in filtered_urls_set]
+                print(f"\n📌 Applied job range filter: {len(all_jobs_data)} jobs (from job {start_job} to job {min(end_job, len(all_job_links))})")
+            
+            total_processed = len(all_job_links)
+            filtered_count = total_processed - len(all_jobs_data)
+        else:
+            # Traditional mode - collect all links first, then scrape
+            all_job_links = collect_job_links(driver, end_job)
+            print(f"\nTotal job links collected: {len(all_job_links)}")
+            
+            if len(all_job_links) == 0:
+                print("\n❌ No jobs found. Exiting.")
+                driver.quit()
+                return
+            
+            # Filter to requested range
+            all_job_links = filter_job_range(all_job_links, start_job, end_job)
+            print(f"Selected range: {len(all_job_links)} jobs (from job {start_job} to job {min(end_job, start_job + len(all_job_links) - 1)})")
+            
+            # Close initial driver
+            driver.quit()
+            
+            # Scrape jobs in parallel
+            print(f"\n⚡ Scraping {len(all_job_links)} jobs using {num_workers} parallel browser(s)...")
+            print("(Much faster with parallel processing!)")
+            
+            total_processed = len(all_job_links)
+            all_jobs_data = scrape_jobs_in_parallel(all_job_links, start_job, num_workers, filename)
+            filtered_count = total_processed - len(all_jobs_data)
         
         # Save final results
         if all_jobs_data:
