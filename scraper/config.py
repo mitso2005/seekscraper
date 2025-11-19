@@ -6,17 +6,17 @@ LOCATION = "All-Melbourne-VIC"
 BASE_URL = "https://www.seek.com.au"
 
 # Scraping settings
-DEFAULT_WORKERS = 5
-MAX_WORKERS = 10
+DEFAULT_WORKERS = 8  # Increased from 5 for faster scraping
+MAX_WORKERS = 15  # Increased from 10 - adjust based on your RAM
 CHECKPOINT_INTERVAL = 100
 MAX_PAGES = 100
 
 # Timeout settings (in seconds)
-PAGE_LOAD_TIMEOUT = 2
-ELEMENT_WAIT_TIMEOUT = 2
-BRIEF_PAUSE = 0.3
-PAGE_TRANSITION = 1
-PAGINATION_SCROLL = 1
+PAGE_LOAD_TIMEOUT = 1.5  # Reduced from 2 for faster page loads
+ELEMENT_WAIT_TIMEOUT = 1.5  # Reduced from 2 for faster element waits
+BRIEF_PAUSE = 0.2  # Reduced from 0.3
+PAGE_TRANSITION = 0.8  # Reduced from 1
+PAGINATION_SCROLL = 0.8  # Reduced from 1
 
 # Chrome options
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
