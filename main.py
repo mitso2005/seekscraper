@@ -13,6 +13,8 @@ from scraper.link_collector import collect_job_links, filter_job_range
 from scraper.parallel_scraper import scrape_jobs_in_parallel
 from scraper.user_input import get_sort_preference, get_parallel_workers, get_job_range
 from scraper.data_export import create_filename, save_to_excel, print_statistics, save_partial_data
+from scraper.google_enrichment import enrich_with_google_phone
+from scraper.config import ENABLE_GOOGLE_ENRICHMENT
 
 def main():
     """Main execution function."""
@@ -85,6 +87,15 @@ def main():
         total_processed = len(all_job_links)
         all_jobs_data = scrape_jobs_in_parallel(all_job_links, start_job, num_workers, filename)
         filtered_count = total_processed - len(all_jobs_data)
+        
+        # Google Business enrichment for office phone numbers
+        if all_jobs_data and ENABLE_GOOGLE_ENRICHMENT:
+            print("\n📊 Processing scraped data...")
+            enrichment_driver = setup_driver(headless=False)  # Show browser for Google searches
+            try:
+                all_jobs_data = enrich_with_google_phone(all_jobs_data, enrichment_driver)
+            finally:
+                enrichment_driver.quit()
         
         # Save final results
         if all_jobs_data:

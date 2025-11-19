@@ -82,6 +82,7 @@ def print_statistics(df, filename, total_processed=None, filtered_count=0):
     print(f"Failed to extract: {failed_scrapes}")
     print(f"Jobs with email: {df['email'].astype(bool).sum()}")
     print(f"Jobs with phone: {df['phone'].astype(bool).sum()}")
+    print(f"Jobs with office phone: {df['office_phone'].astype(bool).sum()}")
     print(f"Jobs with website: {df['website'].astype(bool).sum()}")
     print("=" * 60)
 

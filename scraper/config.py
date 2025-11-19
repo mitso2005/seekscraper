@@ -21,11 +21,15 @@ PAGINATION_SCROLL = 1
 # Chrome options
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+# Google enrichment settings
+ENABLE_GOOGLE_ENRICHMENT = True  # Set to False to skip Google Business phone lookup
+GOOGLE_SEARCH_DELAY = 3  # Seconds between Google searches to avoid rate limiting
+
 # Data columns
 COLUMNS = [
     'job_title', 'company', 'location', 'classification', 
     'work_type', 'salary', 'time_posted', 'application_volume', 
-    'email', 'phone', 'website', 'url'
+    'email', 'phone', 'office_phone', 'website', 'url'
 ]
 
 # Invalid website domains to filter
