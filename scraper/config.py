@@ -28,7 +28,7 @@ GOOGLE_SEARCH_DELAY = 3  # Not used in parallel mode (each browser has own delay
 # Data columns
 COLUMNS = [
     'job_title', 'company', 'location', 'classification', 
-    'work_type', 'salary', 'time_posted', 'application_volume', 
+    'work_type', 'salary', 'time_posted', 
     'email', 'phone', 'office_phone', 'website', 'url'
 ]
 
@@ -40,6 +40,14 @@ INVALID_DOMAINS = [
 
 # Recruitment companies to filter out (case-insensitive matching)
 RECRUITMENT_COMPANIES = [
+    'Recruitment',
+    'Recruiters',
+    'Recruiting',
+    'Staffing',
+    'Staffing Solutions',
+    'Talent Solutions',
+    'Recruit',
+    'Consulting',
     'Hays Technology',
     'Hays',
     'Robert Half Technology',
@@ -75,5 +83,39 @@ RECRUITMENT_COMPANIES = [
     'CircuIT Recruitment',
     'CircuIT',
     'Randstad Digital',
-    'Randstad'
+    'Randstad',
+    'Emmbr',
+    'Pathfinder Recruitment',
+    'SALT SEARCH PTY LTD',
+    'Talenza',
+    'Slade Group',
+    'Experis AU',
+    'Precision Sourcing',
+    'Opus Recruitment Solutions',
+    'Reo Group',
+    'Robert Walters',
+    'Woods & Co',
+    'Natural Selection Group',
+    'Evolution Recruitment Solutions Pty Ltd',
+    'Recruitment Professionals Pty Ltd',
+    'GradConnection',
+    'The Decipher Bureau',
+    'Green Light PS Pty Ltd',
+    'Morgan Consulting',
+    'Nigel Frank International',
+    'Genesis IT Recruitment',
+    'FourQuarters Recruitment',
+    'Just Digital People',
+    'BSS INSIGHT PTY LTD',
+    'Refactor Recruitment Pty Ltd',
+    'Shield Recruitment',
+    'SustainRecruit',
+    'FinXL IT Professional Services',
+    'Conquest Recruitment Group Pty Ltd',
+    'Recruitment Hive',
+    'Scalene Group Pty Ltd',
+    'Mars Recruitment',
+    'Dynamo Recruitment',
+    'The Onset',
+    'Aurec',
 ]
