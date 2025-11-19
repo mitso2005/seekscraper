@@ -82,9 +82,9 @@ def main():
         print(f"\n⚡ Scraping {len(all_job_links)} jobs using {num_workers} parallel browser(s)...")
         print("(Much faster with parallel processing!)")
         
-        enrichment_status = "ON" if ENABLE_GOOGLE_ENRICHMENT else "OFF"
+        google_status = "ON" if ENABLE_GOOGLE_ENRICHMENT else "OFF"
         print(f"🚫 Filtering: recruitment companies + contract/temp + large companies (1000+ employees)...")
-        print(f"📞 Google Business enrichment: {enrichment_status}\n")
+        print(f"📞 Google Business enrichment: {google_status}\n")
         
         total_processed = len(all_job_links)
         all_jobs_data = scrape_jobs_in_parallel(all_job_links, start_job, num_workers, filename)

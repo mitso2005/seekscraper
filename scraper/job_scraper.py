@@ -19,7 +19,7 @@ def create_empty_job_data(job_url):
         'salary': '',
         'time_posted': '',
         'email': '',
-        'phone': '',
+        'ad_phone': '',
         'office_phone': '',
         'website': '',
         'url': job_url
