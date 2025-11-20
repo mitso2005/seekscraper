@@ -114,7 +114,19 @@ def click_next_page(driver):
                 
                 # Click using JavaScript to avoid interception issues
                 driver.execute_script("arguments[0].click();", next_button)
-                time.sleep(PAGINATION_SCROLL)
+                
+                # Wait for page to transition or stabilize
+                time.sleep(PAGINATION_SCROLL * 1.5)
+                
+                # Extra safety: wait for job links to be visible or at least page to respond
+                try:
+                    WebDriverWait(driver, 2).until(
+                        EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'article'))
+                    )
+                except:
+                    # Page might not have articles, but that's okay - we tried
+                    pass
+                
                 return True
             except:
                 continue

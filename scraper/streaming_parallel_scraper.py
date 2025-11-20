@@ -4,6 +4,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 import pandas as pd
 import signal
+import time
+from datetime import datetime, timedelta
 from .driver_setup import setup_driver
 from .job_scraper import scrape_job_details, create_empty_job_data
 from .google_enrichment import search_google_business_phone
@@ -21,6 +23,10 @@ cache_lock = Lock()
 current_executor = None
 active_drivers = []
 drivers_lock = Lock()
+# Quota error tracking
+quota_errors = 0
+quota_lock = Lock()
+MAX_QUOTA_ERRORS = 5  # Trigger pause after this many errors
 
 
 def cleanup_all_browsers():
@@ -41,8 +47,39 @@ def cleanup_all_browsers():
         active_drivers.clear()
 
 
+def wait_for_quota_reset(wait_minutes=5):
+    """Wait for Google quota to reset."""
+    global quota_errors
+    
+    print(f"\n{'='*60}")
+    print(f"⏸️  GOOGLE QUOTA LIMIT - Pausing for {wait_minutes} minutes")
+    print(f"{'='*60}\n")
+    
+    cleanup_all_browsers()
+    
+    # Countdown
+    for remaining in range(wait_minutes * 60, 0, -30):
+        mins = remaining // 60
+        secs = remaining % 60
+        print(f"⏳ Resuming in: {mins:02d}:{secs:02d}", end='\r', flush=True)
+        time.sleep(30)
+    
+    print(f"\n\n✅ Quota reset! Restarting browsers...\n")
+    
+    # Reset quota counter
+    with quota_lock:
+        quota_errors = 0
+
+
+def check_quota_exceeded():
+    """Check if quota threshold reached."""
+    with quota_lock:
+        return quota_errors >= MAX_QUOTA_ERRORS
+
+
 def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
     """Scrape a single job in a separate browser instance (for parallel execution)."""
+    global quota_errors
     driver = None
     try:
         driver = setup_driver(headless=headless)
@@ -64,10 +101,18 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
                     if company in company_phone_cache:
                         job_data['office_phone'] = company_phone_cache[company]
                     else:
-                        # Not in cache, search Google (still using same driver)
-                        office_phone = search_google_business_phone(driver, company, location)
-                        job_data['office_phone'] = office_phone
-                        company_phone_cache[company] = office_phone
+                        # Not in cache, search Google
+                        try:
+                            office_phone = search_google_business_phone(driver, company, location)
+                            job_data['office_phone'] = office_phone
+                            company_phone_cache[company] = office_phone
+                        except Exception as google_err:
+                            # Track quota errors
+                            if 'quota' in str(google_err).lower() or 'rate' in str(google_err).lower():
+                                with quota_lock:
+                                    quota_errors += 1
+                                    print(f"  ⚠️  Quota error ({quota_errors}/{MAX_QUOTA_ERRORS})")
+                            job_data['office_phone'] = ''
         
         driver.quit()
         
@@ -98,10 +143,12 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
         return create_empty_job_data(job_url)
 
 
-def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename):
+def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename, use_page_based=False, start_page=1, end_page=None, sort_by_date=False):
     """
     Scrape jobs using streaming approach - starts scraping while still collecting links.
     Auto-resumes from checkpoint if available.
+    
+    Supports both job-based (legacy) and page-based (new) collection strategies.
     
     Args:
         driver: Selenium WebDriver for link collection
@@ -109,6 +156,10 @@ def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename):
         end_job: Ending job number (inclusive) - e.g., 1550
         num_workers: Number of parallel browser instances
         filename: Output Excel filename
+        use_page_based: If True, use page-based navigation (direct page parameter)
+        start_page: Page number to start from (default: 1)
+        end_page: Page number to stop at (inclusive). If None, uses end_job as link count threshold.
+        sort_by_date: Sort by listing date when navigating (default: False)
     
     Returns:
         Tuple of (all_jobs_data, all_job_urls)
@@ -129,7 +180,7 @@ def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename):
         job_index = 0
         
         # Stream links and submit jobs as we get them
-        for batch_links in stream_job_links(driver, end_job):
+        for batch_links in stream_job_links(driver, end_job, start_page=start_page, sort_by_date=sort_by_date, end_page=end_page):
             all_job_urls.extend(batch_links)
             
             # Submit this batch for scraping immediately
@@ -164,6 +215,19 @@ def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename):
         
         # Collect results as they complete
         for future in as_completed(futures):
+            # Check quota threshold periodically
+            if check_quota_exceeded():
+                print("\n⚠️  Quota threshold reached - triggering pause...")
+                # Save checkpoint before pausing
+                valid_data = [j for j in all_jobs_data if j is not None]
+                merged_data = resume_mgr.merge_with_existing(valid_data)
+                df_checkpoint = pd.DataFrame(merged_data, columns=COLUMNS)
+                df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
+                resume_mgr.save_progress(valid_data)
+                # Wait and reset
+                wait_for_quota_reset(wait_minutes=5)
+                # Reset error counter handled in wait function
+            
             idx = futures[future]
             try:
                 job_data = future.result()
