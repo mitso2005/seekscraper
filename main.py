@@ -32,7 +32,7 @@ def main():
     
     print(f"\n⚡ Using {num_workers} parallel browser(s) for faster scraping!")
     if use_streaming:
-        print("🚀 Streaming mode: Scraping starts immediately as links are found!")
+        print("Streaming mode: Scraping starts immediately as links are found!")
     print("\nInitializing...\n")
     
     driver = setup_driver(headless=True)
@@ -66,7 +66,7 @@ def main():
             total_jobs = 9999  # Fallback
         
         # Get job range from user
-        start_job, end_job, use_page_based, start_page, end_page = get_job_range(total_jobs)
+        start_job, end_job = get_job_range(total_jobs)
         
         # Create filename
         filename = create_filename()
@@ -78,18 +78,17 @@ def main():
         # Choose scraping mode
         if use_streaming:
             # Streaming mode - scrape while collecting links
-            print("🚀 Starting streaming scrape (links processed as found)...\n")
-            # Pass parameters including page-based search info
+            print(" Starting streaming scrape (links processed as found)...\n")
+            # Pass parameters without page-based search info
             all_jobs_data, all_job_links = scrape_jobs_streaming(
-                driver, start_job, end_job, num_workers, filename,
-                use_page_based=use_page_based, start_page=start_page, end_page=end_page, sort_by_date=sort_by_date
+                driver, start_job, end_job, num_workers, filename, sort_by_date=sort_by_date
             )
             
             total_processed = len(all_job_links)
             filtered_count = total_processed - len(all_jobs_data)
         else:
             # Traditional mode - collect all links first, then scrape
-            all_job_links = collect_job_links(driver, end_job, start_page=start_page, sort_by_date=sort_by_date, end_page=end_page)
+            all_job_links = collect_job_links(driver, end_job, start_page=1, sort_by_date=sort_by_date)
             print(f"\nTotal job links collected: {len(all_job_links)}")
             
             if len(all_job_links) == 0:

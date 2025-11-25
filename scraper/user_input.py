@@ -38,77 +38,31 @@ def get_scraping_mode():
 def get_job_range(total_jobs):
     """
     Ask user which jobs to scrape.
-    Supports both job-based ranges (legacy) and page-based ranges (new).
+    Supports job-based ranges.
     
     Args:
         total_jobs: Total number of jobs available
     
     Returns:
-        Tuple of (start_job, end_job, use_page_based, start_page)
+        Tuple of (start_job, end_job)
         - start_job: Job number to start from
         - end_job: Job number to end at
-        - use_page_based: Boolean indicating if page-based search should be used
-        - start_page: Page number to start from (only relevant if use_page_based=True)
     """
     while True:
         print("\n" + "="*60)
-        print("SEARCH MODE OPTIONS:")
+        print("JOB RANGE SELECTION:")
         print("="*60)
-        print("1. Job-based search (legacy):  '1-100', '600-700'")
-        print("   - Clicks through all pages sequentially")
-        print("\n2. Page-based search (new):    'page:15-20', 'page:8'")
-        print("   - Navigates directly to page 15+ (faster for high ranges)")
-        print("   - Example: 'page:15-20' means collect jobs from page 15 onward")
-        print("   - Collects ~20 jobs per page, adjust range as needed")
+        print("Enter a job range like '1-100', '600-700'")
+        print("Or enter 'all' to scrape all available jobs")
         print("="*60)
         
-        range_input = input(f"\nEnter search range (or 'all' for jobs 1-{total_jobs}): ").strip().lower()
+        range_input = input(f"\nEnter job range (or 'all' for jobs 1-{total_jobs}): ").strip().lower()
         
         if range_input == 'all':
             print(f"Will scrape ALL jobs (1 to {total_jobs})")
-            return 1, total_jobs, False, 1, None
+            return 1, total_jobs
         
-        # Page-based search
-        elif range_input.startswith('page:'):
-            try:
-                page_range = range_input[5:].strip()
-                
-                if '-' in page_range:
-                    # Range of pages: 'page:15-20'
-                    parts = page_range.split('-')
-                    start_page = int(parts[0].strip())
-                    end_page = int(parts[1].strip())
-                    
-                    if start_page < 1 or end_page < start_page:
-                        print("Invalid page range. Start page must be >= 1 and start <= end.")
-                        continue
-                    
-                    # For page-based search, use a large end_job to not limit by job count
-                    estimated_end_job = 999999  # Very large number, use end_page instead
-                    num_pages = end_page - start_page + 1
-                    estimated_jobs = num_pages * 22
-                    print(f"Will scrape pages {start_page} to {end_page} ({num_pages} pages)")
-                    print(f"(Estimated: approximately {estimated_jobs} jobs ({num_pages} pages × ~20 jobs/page))")
-                    return 1, estimated_end_job, True, start_page, end_page
-                else:
-                    # Single page: 'page:15' means start from page 15
-                    start_page = int(page_range)
-                    
-                    if start_page < 1:
-                        print("Invalid page number. Must be >= 1.")
-                        continue
-                    
-                    # Collect many jobs from this page onward (no end_page limit)
-                    estimated_end_job = 999999  # Very large number, will use MAX_PAGES limit instead
-                    print(f"Will scrape jobs starting from page {start_page} onward")
-                    print(f"(Will collect ~20 jobs per page until reaching end of results)")
-                    return 1, estimated_end_job, True, start_page, None
-                    
-            except ValueError:
-                print("Invalid page format. Use 'page:15' or 'page:15-20'")
-                continue
-        
-        # Job-based search (legacy)
+        # Job-based search
         elif '-' in range_input:
             try:
                 parts = range_input.split('-')
@@ -120,9 +74,8 @@ def get_job_range(total_jobs):
                     continue
                 
                 print(f"Will scrape jobs {start_job} to {end_job} ({end_job - start_job + 1} jobs)")
-                print("(Using job-based search: will click through all pages sequentially)")
-                return start_job, end_job, False, 1, None
+                return start_job, end_job
             except ValueError:
                 print("Invalid format. Use format like '1-100' or 'all'.")
         else:
-            print("Invalid input. Use formats: '1-100', 'all', 'page:15', or 'page:15-20'.")
+            print("Invalid input. Use formats: '1-100' or 'all'.")
