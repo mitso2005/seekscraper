@@ -144,16 +144,21 @@ def extract_salary(driver):
 def extract_time_posted(driver):
     """Extract time posted from the page."""
     try:
-        time_elements = driver.find_elements(By.CSS_SELECTOR, '._1i38d6g0.dk7b5050.h9jxny0.h9jxny1.h9jxny1u.h9jxny6._1lwlriv4')
-        for element in time_elements:
+        # Search for any element containing "Posted" text
+        all_elements = driver.find_elements(By.XPATH, "//*[contains(text(), 'Posted') or contains(text(), 'posted')]")
+        for element in all_elements:
             text = element.text.strip()
-            if text and text.lower().startswith('posted'):
+            # Match patterns like "Posted 4d ago", "Posted 1h ago", etc.
+            if text and ('posted' in text.lower() and 'ago' in text.lower()):
                 return text
     except:
         pass
     
-    # Fallback
-    selectors = ['[data-automation="job-detail-date"]']
+    # Try specific selectors
+    selectors = [
+        '[data-automation="job-detail-date"]',
+        'span[data-automation="job-detail-date"]'
+    ]
     return extract_text_by_selector(driver, selectors)
 
 def extract_contact_details(driver):
