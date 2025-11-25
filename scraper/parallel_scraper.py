@@ -15,11 +15,9 @@ company_phone_cache = {}
 cache_lock = Lock()
 
 
-def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
-    """Scrape a single job in a separate browser instance (for parallel execution)."""
-    driver = None
+def scrape_job_with_driver(driver, job_url, job_num):
+    """Scrape a single job using an existing browser instance."""
     try:
-        driver = setup_driver(headless=headless)
         job_data = scrape_job_details(driver, job_url)
         
         # If job was not filtered and Google enrichment is enabled, get office phone
@@ -38,8 +36,6 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
                         job_data['office_phone'] = office_phone
                         company_phone_cache[company] = office_phone
         
-        driver.quit()
-        
         # Check if job was filtered
         if job_data is None:
             print(f"  🚫 [Job #{job_num}] Filtered")
@@ -50,18 +46,35 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
         print(f"  ✓ [Job #{job_num}] Completed {office_phone_status}")
         return job_data
     except Exception as e:
+        print(f"  ✗ [Job #{job_num}] Failed: {e}")
+        return create_empty_job_data(job_url)
+
+
+def persistent_worker(jobs_queue, results, headless=True):
+    """Worker that maintains a persistent browser for multiple jobs."""
+    driver = None
+    try:
+        driver = setup_driver(headless=headless)
+        while True:
+            job_item = jobs_queue.get()
+            if job_item is None:  # Shutdown signal
+                break
+            
+            idx, job_url, job_num = job_item
+            job_data = scrape_job_with_driver(driver, job_url, job_num)
+            results[idx] = job_data
+            
+    finally:
         if driver:
             try:
                 driver.quit()
             except:
                 pass
-        print(f"  ✗ [Job #{job_num}] Failed: {e}")
-        return create_empty_job_data(job_url)
 
 
 def scrape_jobs_in_parallel(job_urls, start_job, num_workers, filename):
     """
-    Scrape jobs in parallel using multiple browser instances.
+    Scrape jobs in parallel using persistent browser instances (connection pooling).
     
     Args:
         job_urls: List of job URLs to scrape
@@ -72,36 +85,48 @@ def scrape_jobs_in_parallel(job_urls, start_job, num_workers, filename):
     Returns:
         List of job data dictionaries
     """
-    all_jobs_data = [None] * len(job_urls)
-    completed = 0
+    from queue import Queue
+    from threading import Thread
     
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        # Submit all jobs
-        future_to_index = {
-            executor.submit(scrape_job_parallel, job_url, start_job + idx, len(job_urls), headless=True): idx 
-            for idx, job_url in enumerate(job_urls)
-        }
-        
-        # Collect results as they complete
-        for future in as_completed(future_to_index):
-            idx = future_to_index[future]
-            try:
-                job_data = future.result()
-                all_jobs_data[idx] = job_data
-                completed += 1
-                
-                # Progress update
-                if completed % 10 == 0 or completed == len(job_urls):
-                    print(f"  Progress: {completed}/{len(job_urls)} jobs completed ({(completed/len(job_urls)*100):.1f}%)")
-                
-                # Save checkpoint every 100 jobs
-                if completed % 100 == 0:
-                    save_checkpoint(all_jobs_data, filename)
-                    print(f"  💾 Checkpoint saved: {completed} jobs")
-                    
-            except Exception as e:
-                print(f"  ✗ Job {idx+1} failed: {e}")
-                all_jobs_data[idx] = create_empty_job_data(job_urls[idx])
+    all_jobs_data = [None] * len(job_urls)
+    jobs_queue = Queue()
+    completed = [0]  # Use list for mutable counter
+    
+    # Enqueue all jobs
+    for idx, job_url in enumerate(job_urls):
+        jobs_queue.put((idx, job_url, start_job + idx))
+    
+    # Add shutdown signals
+    for _ in range(num_workers):
+        jobs_queue.put(None)
+    
+    # Start persistent worker threads
+    workers = []
+    for _ in range(num_workers):
+        worker = Thread(target=persistent_worker, args=(jobs_queue, all_jobs_data, True))
+        worker.start()
+        workers.append(worker)
+    
+    # Monitor progress
+    import time
+    while any(w.is_alive() for w in workers):
+        time.sleep(0.5)
+        current_completed = sum(1 for job in all_jobs_data if job is not None)
+        if current_completed != completed[0]:
+            completed[0] = current_completed
+            
+            # Progress update
+            if completed[0] % 10 == 0 or completed[0] == len(job_urls):
+                print(f"  Progress: {completed[0]}/{len(job_urls)} jobs completed ({(completed[0]/len(job_urls)*100):.1f}%)")
+            
+            # Save checkpoint every 100 jobs
+            if completed[0] % 100 == 0:
+                save_checkpoint(all_jobs_data, filename)
+                print(f"  💾 Checkpoint saved: {completed[0]} jobs")
+    
+    # Wait for all workers to finish
+    for worker in workers:
+        worker.join()
     
     # Remove any None values with progress feedback
     print("\n  📊 Processing scraped data...")

@@ -77,17 +77,10 @@ def check_quota_exceeded():
         return quota_errors >= MAX_QUOTA_ERRORS
 
 
-def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
-    """Scrape a single job in a separate browser instance (for parallel execution)."""
+def scrape_job_with_driver(driver, job_url, job_num):
+    """Scrape a single job using an existing browser instance."""
     global quota_errors
-    driver = None
     try:
-        driver = setup_driver(headless=headless)
-        
-        # Track driver globally for cleanup
-        with drivers_lock:
-            active_drivers.append(driver)
-        
         job_data = scrape_job_details(driver, job_url)
         
         # If job was not filtered and Google enrichment is enabled, get office phone
@@ -114,13 +107,6 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
                                     print(f"  ⚠️  Quota error ({quota_errors}/{MAX_QUOTA_ERRORS})")
                             job_data['office_phone'] = ''
         
-        driver.quit()
-        
-        # Remove from active list
-        with drivers_lock:
-            if driver in active_drivers:
-                active_drivers.remove(driver)
-        
         # Check if job was filtered
         if job_data is None:
             print(f"  🚫 [Job #{job_num}] Filtered")
@@ -131,6 +117,31 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
         print(f"  ✓ [Job #{job_num}] Completed {office_phone_status}")
         return job_data
     except Exception as e:
+        print(f"  ✗ [Job #{job_num}] Failed: {e}")
+        return create_empty_job_data(job_url)
+
+
+def persistent_worker(jobs_queue, results, headless=True):
+    """Worker that maintains a persistent browser for multiple jobs."""
+    driver = None
+    try:
+        driver = setup_driver(headless=headless)
+        
+        # Track driver globally for cleanup
+        with drivers_lock:
+            active_drivers.append(driver)
+        
+        while True:
+            job_item = jobs_queue.get()
+            if job_item is None:  # Shutdown signal
+                break
+            
+            idx, job_url, job_num = job_item
+            job_data = scrape_job_with_driver(driver, job_url, job_num)
+            results[idx] = job_data
+            jobs_queue.task_done()
+            
+    finally:
         if driver:
             try:
                 driver.quit()
@@ -139,13 +150,11 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
                         active_drivers.remove(driver)
             except:
                 pass
-        print(f"  ✗ [Job #{job_num}] Failed: {e}")
-        return create_empty_job_data(job_url)
 
 
 def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename, use_page_based=False, start_page=1, end_page=None, sort_by_date=False):
     """
-    Scrape jobs using streaming approach - starts scraping while still collecting links.
+    Scrape jobs using streaming approach with persistent browsers (connection pooling).
     Auto-resumes from checkpoint if available.
     
     Supports both job-based (legacy) and page-based (new) collection strategies.
@@ -164,58 +173,69 @@ def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename, use
     Returns:
         Tuple of (all_jobs_data, all_job_urls)
     """
-    global current_executor
+    from queue import Queue
+    from threading import Thread
     
     # Initialize resume manager
     resume_mgr = ResumeManager(filename)
     
     all_jobs_data = []
     all_job_urls = []
-    completed = 0
+    jobs_queue = Queue()
+    job_index_map = {}  # Map queue items to result indices
+    next_idx = [0]  # Mutable counter for indexing
     
-    # Create thread pool for scraping
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        current_executor = executor
-        futures = {}
-        job_index = 0
+    # Start persistent worker threads
+    workers = []
+    for _ in range(num_workers):
+        worker = Thread(target=persistent_worker, args=(jobs_queue, all_jobs_data, True))
+        worker.daemon = True
+        worker.start()
+        workers.append(worker)
+    
+    # Stream links and submit jobs as we get them
+    for batch_links in stream_job_links(driver, end_job, start_page=start_page, sort_by_date=sort_by_date, end_page=end_page):
+        all_job_urls.extend(batch_links)
         
-        # Stream links and submit jobs as we get them
-        for batch_links in stream_job_links(driver, end_job, start_page=start_page, sort_by_date=sort_by_date, end_page=end_page):
-            all_job_urls.extend(batch_links)
+        # Submit this batch for scraping immediately
+        for job_url in batch_links:
+            # Calculate actual job number (1-indexed position in ALL jobs)
+            current_job_num = len(all_job_urls) - len(batch_links) + (len(batch_links) - batch_links[::-1].index(job_url) - 1) + 1
             
-            # Submit this batch for scraping immediately
-            for job_url in batch_links:
-                # Calculate actual job number (1-indexed position in ALL jobs)
-                current_job_num = len(all_job_urls) - len(batch_links) + job_index + 1
-                
-                # Only scrape if within requested range AND not already completed
-                if current_job_num >= start_job and current_job_num <= end_job:
-                    if not resume_mgr.is_completed(job_url):
-                        future = executor.submit(scrape_job_parallel, job_url, current_job_num, end_job, headless=True)
-                        futures[future] = len(futures)
-                    else:
-                        print(f"  ⏭️  [Job #{current_job_num}] Already completed (skipped)")
-                
-                job_index += 1
+            # Only scrape if within requested range AND not already completed
+            if current_job_num >= start_job and current_job_num <= end_job:
+                if not resume_mgr.is_completed(job_url):
+                    idx = next_idx[0]
+                    next_idx[0] += 1
+                    all_jobs_data.append(None)  # Pre-allocate slot
+                    jobs_queue.put((idx, job_url, current_job_num))
+                else:
+                    print(f"  ⏭️  [Job #{current_job_num}] Already completed (skipped)")
+        
+        jobs_to_scrape = next_idx[0]
+        already_done = len(resume_mgr.completed_urls)
+        print(f"  ⚡ Batch collected. To scrape: {jobs_to_scrape}, Already done: {already_done}")
+    
+    # Close the search driver now that we're done collecting
+    print(f"\n✅ Link collection complete! {len(all_job_urls)} total links found.")
+    print(f"📌 Job range {start_job}-{end_job}: {next_idx[0]} jobs to scrape")
+    if len(resume_mgr.completed_urls) > 0:
+        print(f"♻️  Resuming: {len(resume_mgr.completed_urls)} jobs already completed")
+    print(f"⚡ Scraping in progress with {num_workers} persistent browsers...\n")
+    driver.quit()
+    
+    # Monitor progress
+    completed = [0]
+    total_jobs = next_idx[0]
+    
+    while jobs_queue.unfinished_tasks > 0 or any(w.is_alive() for w in workers):
+        time.sleep(0.5)
+        current_completed = sum(1 for job in all_jobs_data if job is not None)
+        
+        if current_completed != completed[0]:
+            completed[0] = current_completed
             
-            jobs_to_scrape = len(futures)
-            already_done = len(resume_mgr.completed_urls)
-            print(f"  ⚡ Batch collected. To scrape: {jobs_to_scrape}, Already done: {already_done}")
-        
-        # Close the search driver now that we're done collecting
-        print(f"\n✅ Link collection complete! {len(all_job_urls)} total links found.")
-        print(f"📌 Job range {start_job}-{end_job}: {len(futures)} jobs to scrape")
-        if len(resume_mgr.completed_urls) > 0:
-            print(f"♻️  Resuming: {len(resume_mgr.completed_urls)} jobs already completed")
-        print(f"⚡ Scraping in progress with {num_workers} parallel browsers...\n")
-        driver.quit()
-        
-        # Initialize results array
-        all_jobs_data = [None] * len(futures)
-        
-        # Collect results as they complete
-        for future in as_completed(futures):
-            # Check quota threshold periodically
+            # Check quota threshold
             if check_quota_exceeded():
                 print("\n⚠️  Quota threshold reached - triggering pause...")
                 # Save checkpoint before pausing
@@ -224,40 +244,32 @@ def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename, use
                 df_checkpoint = pd.DataFrame(merged_data, columns=COLUMNS)
                 df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
                 resume_mgr.save_progress(valid_data)
-                # Wait and reset
                 wait_for_quota_reset(wait_minutes=5)
-                # Reset error counter handled in wait function
             
-            idx = futures[future]
-            try:
-                job_data = future.result()
-                all_jobs_data[idx] = job_data
-                completed += 1
-                
-                # Progress update
-                if completed % 10 == 0 or completed == len(futures):
-                    total_done = completed + len(resume_mgr.completed_urls)
-                    print(f"  Progress: {completed}/{len(futures)} jobs completed this session ({(completed/len(futures)*100):.1f}%) | Total: {total_done}")
-                
-                # Save checkpoint using CHECKPOINT_INTERVAL
-                if completed % CHECKPOINT_INTERVAL == 0:
-                    # Filter valid data
-                    valid_data = [j for j in all_jobs_data if j is not None]
-                    # Merge with existing checkpoint
-                    merged_data = resume_mgr.merge_with_existing(valid_data)
-                    # Save checkpoint
-                    df_checkpoint = pd.DataFrame(merged_data, columns=COLUMNS)
-                    df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
-                    # Save progress tracking
-                    resume_mgr.save_progress(valid_data)
-                    print(f"  💾 Checkpoint saved: {len(merged_data)} total jobs")
-                    
-            except Exception as e:
-                print(f"  ✗ Job {idx+1} failed: {e}")
-                if idx < len(all_job_urls):
-                    all_jobs_data[idx] = create_empty_job_data(all_job_urls[idx])
+            # Progress update
+            if completed[0] % 10 == 0 or completed[0] == total_jobs:
+                total_done = completed[0] + len(resume_mgr.completed_urls)
+                print(f"  Progress: {completed[0]}/{total_jobs} jobs completed this session ({(completed[0]/total_jobs*100):.1f}%) | Total: {total_done}")
+            
+            # Save checkpoint using CHECKPOINT_INTERVAL
+            if completed[0] % CHECKPOINT_INTERVAL == 0:
+                valid_data = [j for j in all_jobs_data if j is not None]
+                merged_data = resume_mgr.merge_with_existing(valid_data)
+                df_checkpoint = pd.DataFrame(merged_data, columns=COLUMNS)
+                df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
+                resume_mgr.save_progress(valid_data)
+                print(f"  💾 Checkpoint saved: {len(merged_data)} total jobs")
+        
+        if jobs_queue.empty() and completed[0] >= total_jobs:
+            break
     
-    current_executor = None
+    # Send shutdown signals
+    for _ in range(num_workers):
+        jobs_queue.put(None)
+    
+    # Wait for all workers to finish
+    for worker in workers:
+        worker.join(timeout=5)
     
     # Remove any None values with progress feedback
     print("\n  📊 Processing scraped data...")
