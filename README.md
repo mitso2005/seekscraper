@@ -59,3 +59,6 @@ Due to Seek.com.au rate limiting and Google restrictions, the following limitati
 ## Educational Use Only
 
 This scraper ignores robots.txt and is intended for learning and research purposes only. Please review Seek's Terms of Service before using this tool.
+
+
+

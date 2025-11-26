@@ -24,6 +24,7 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 # Google enrichment settings
 ENABLE_GOOGLE_ENRICHMENT = True  # Set to False to skip Google Business phone lookup
 GOOGLE_SEARCH_DELAY = 3  # Not used in parallel mode (each browser has own delays)
+COMPANY_PHONE_CACHE_FILE = 'company_phone_cache.json'  # Persistent cache file
 
 # Data columns
 COLUMNS = [

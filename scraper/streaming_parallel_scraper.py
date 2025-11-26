@@ -5,11 +5,13 @@ from threading import Lock
 import pandas as pd
 import signal
 import time
+import json
+import os
 from datetime import datetime, timedelta
 from .driver_setup import setup_driver
 from .job_scraper import scrape_job_details, create_empty_job_data
 from .google_enrichment import search_google_business_phone
-from .config import COLUMNS, ENABLE_GOOGLE_ENRICHMENT, CHECKPOINT_INTERVAL
+from .config import COLUMNS, ENABLE_GOOGLE_ENRICHMENT, CHECKPOINT_INTERVAL, COMPANY_PHONE_CACHE_FILE
 from .streaming_collector import stream_job_links
 from .link_collector import filter_job_range
 from .resume_manager import ResumeManager
@@ -27,6 +29,31 @@ drivers_lock = Lock()
 quota_errors = 0
 quota_lock = Lock()
 MAX_QUOTA_ERRORS = 5  # Trigger pause after this many errors
+
+
+def load_phone_cache():
+    """Load company phone cache from JSON file."""
+    global company_phone_cache
+    if os.path.exists(COMPANY_PHONE_CACHE_FILE):
+        try:
+            with open(COMPANY_PHONE_CACHE_FILE, 'r', encoding='utf-8') as f:
+                company_phone_cache = json.load(f)
+            print(f"  📞 Loaded {len(company_phone_cache)} cached company phones")
+        except Exception as e:
+            print(f"  ⚠️  Could not load phone cache: {e}")
+            company_phone_cache = {}
+    else:
+        company_phone_cache = {}
+
+
+def save_phone_cache():
+    """Save company phone cache to JSON file."""
+    try:
+        with cache_lock:
+            with open(COMPANY_PHONE_CACHE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(company_phone_cache, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"  ⚠️  Could not save phone cache: {e}")
 
 
 def cleanup_all_browsers():
@@ -99,6 +126,8 @@ def scrape_job_with_driver(driver, job_url, job_num):
                             office_phone = search_google_business_phone(driver, company, location)
                             job_data['office_phone'] = office_phone
                             company_phone_cache[company] = office_phone
+                            # Save cache immediately after finding new phone
+                            save_phone_cache()
                         except Exception as google_err:
                             # Track quota errors
                             if 'quota' in str(google_err).lower() or 'rate' in str(google_err).lower():
@@ -175,6 +204,9 @@ def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename, use
     """
     from queue import Queue
     from threading import Thread
+    
+    # Load phone cache at startup
+    load_phone_cache()
     
     # Initialize resume manager
     resume_mgr = ResumeManager(filename)

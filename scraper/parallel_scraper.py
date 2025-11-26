@@ -3,16 +3,43 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 import pandas as pd
+import json
+import os
 from .driver_setup import setup_driver
 from .job_scraper import scrape_job_details, create_empty_job_data
 from .google_enrichment import search_google_business_phone
-from .config import COLUMNS, ENABLE_GOOGLE_ENRICHMENT
+from .config import COLUMNS, ENABLE_GOOGLE_ENRICHMENT, COMPANY_PHONE_CACHE_FILE
 
 # Thread-safe lock for data collection
 data_lock = Lock()
 # Cache for company phone numbers (thread-safe)
 company_phone_cache = {}
 cache_lock = Lock()
+
+
+def load_phone_cache():
+    """Load company phone cache from JSON file."""
+    global company_phone_cache
+    if os.path.exists(COMPANY_PHONE_CACHE_FILE):
+        try:
+            with open(COMPANY_PHONE_CACHE_FILE, 'r', encoding='utf-8') as f:
+                company_phone_cache = json.load(f)
+            print(f"  📞 Loaded {len(company_phone_cache)} cached company phones")
+        except Exception as e:
+            print(f"  ⚠️  Could not load phone cache: {e}")
+            company_phone_cache = {}
+    else:
+        company_phone_cache = {}
+
+
+def save_phone_cache():
+    """Save company phone cache to JSON file."""
+    try:
+        with cache_lock:
+            with open(COMPANY_PHONE_CACHE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(company_phone_cache, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"  ⚠️  Could not save phone cache: {e}")
 
 
 def scrape_job_with_driver(driver, job_url, job_num):
@@ -35,6 +62,8 @@ def scrape_job_with_driver(driver, job_url, job_num):
                         office_phone = search_google_business_phone(driver, company, location)
                         job_data['office_phone'] = office_phone
                         company_phone_cache[company] = office_phone
+                        # Save cache immediately after finding new phone
+                        save_phone_cache()
         
         # Check if job was filtered
         if job_data is None:
@@ -87,6 +116,9 @@ def scrape_jobs_in_parallel(job_urls, start_job, num_workers, filename):
     """
     from queue import Queue
     from threading import Thread
+    
+    # Load phone cache at startup
+    load_phone_cache()
     
     all_jobs_data = [None] * len(job_urls)
     jobs_queue = Queue()
