@@ -152,7 +152,7 @@ def enrich_with_google_phone(all_jobs_data, driver):
         List of enriched job dictionaries with 'office_phone' field
     """
     print("\n" + "="*60)
-    print("🔍 GOOGLE BUSINESS ENRICHMENT")
+    print("GOOGLE BUSINESS ENRICHMENT")
     print("="*60)
     print("Searching for office phone numbers via Google Business...")
     print(f"Processing {len(all_jobs_data)} companies...\n")
@@ -169,30 +169,27 @@ def enrich_with_google_phone(all_jobs_data, driver):
             job['office_phone'] = ''
             continue
         
-        # Check if we've already searched this company
         if company in company_phones:
             job['office_phone'] = company_phones[company]
             if company_phones[company]:
-                print(f"  ✓ [{idx}/{len(all_jobs_data)}] {company}: {company_phones[company]} (cached)")
+                print(f"  [{idx}/{len(all_jobs_data)}] {company}: {company_phones[company]} (cached)")
         else:
-            # Search Google Business for phone number
-            print(f"  🔎 [{idx}/{len(all_jobs_data)}] Searching: {company}...", end='')
+            print(f"  [{idx}/{len(all_jobs_data)}] Searching: {company}...", end='')
             phone = search_google_business_phone(driver, company, location)
             
             if phone:
-                print(f" ✓ Found: {phone}")
+                print(f" Found: {phone}")
                 enriched_count += 1
             else:
-                print(f" ✗ Not found")
+                print(f" Not found")
             
             company_phones[company] = phone
             job['office_phone'] = phone
             
-            # Add delay to avoid Google rate limiting
             time.sleep(3)
     
     print("\n" + "="*60)
-    print(f"✅ Enrichment complete!")
+    print(f"Enrichment complete!")
     print(f"Office phones found: {enriched_count}/{len(company_phones)} unique companies")
     print("="*60 + "\n")
     

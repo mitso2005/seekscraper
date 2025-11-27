@@ -31,13 +31,12 @@ def save_to_excel(all_jobs_data, filename):
     if not all_jobs_data:
         return None
     
-    print(f"\n  💾 Saving {len(all_jobs_data)} jobs to Excel...")
+    print(f"\nSaving {len(all_jobs_data)} jobs to Excel...")
     
-    # Create DataFrame with specified column order (more efficient)
     df = pd.DataFrame(all_jobs_data, columns=COLUMNS)
     df.to_excel(filename, index=False, engine='openpyxl')
     
-    print(f"  ✅ Excel file saved successfully")
+    print("Excel file saved successfully")
     
     return df
 
@@ -50,12 +49,12 @@ def print_statistics(df, filename, total_processed=None, filtered_count=0):
         df: DataFrame of scraped jobs
         filename: Output filename
         total_processed: Total number of jobs processed (including filtered)
-        filtered_count: Number of jobs filtered out (recruitment companies + non-full-time)
+        filtered_count: Number of jobs filtered out
     """
     if df is None or df.empty:
         if filtered_count > 0:
             print("\n" + "=" * 60)
-            print("⚠️  All jobs were filtered out")
+            print("WARNING: All jobs were filtered out")
             print(f"Total jobs processed: {total_processed}")
             print(f"Jobs filtered (recruitment + contract/temp + large companies): {filtered_count}")
             print("=" * 60)
@@ -63,13 +62,13 @@ def print_statistics(df, filename, total_processed=None, filtered_count=0):
             print("\nNo jobs were scraped. Please check the search criteria or website structure.")
         return
     
-    print("\n  📊 Calculating statistics...")
+    print("\nCalculating statistics...")
     
     successful_scrapes = df[df['job_title'].notna() & (df['job_title'] != '') & (df['job_title'] != 'N/A')].shape[0]
     failed_scrapes = len(df) - successful_scrapes
     
     print("\n" + "=" * 60)
-    print(f"✅ SUCCESS! Data exported to: {filename}")
+    print(f"SUCCESS! Data exported to: {filename}")
     
     if total_processed and filtered_count > 0:
         print(f"Total jobs processed: {total_processed}")
@@ -98,7 +97,7 @@ def save_partial_data(all_jobs_data, interrupted=False):
         if valid_data:
             filename = create_filename(interrupted=interrupted, error=not interrupted)
             df = save_to_excel(valid_data, filename)
-            print(f"💾 Partial data saved to: {filename} ({len(valid_data)} jobs)")
+            print(f"Partial data saved to: {filename} ({len(valid_data)} jobs)")
         else:
             print("No valid data to save.")
     except Exception as save_error:

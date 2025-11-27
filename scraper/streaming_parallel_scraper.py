@@ -52,21 +52,19 @@ def wait_for_quota_reset(wait_minutes=5):
     global quota_errors
     
     print(f"\n{'='*60}")
-    print(f"⏸️  GOOGLE QUOTA LIMIT - Pausing for {wait_minutes} minutes")
+    print(f"GOOGLE QUOTA LIMIT - Pausing for {wait_minutes} minutes")
     print(f"{'='*60}\n")
     
     cleanup_all_browsers()
     
-    # Countdown
     for remaining in range(wait_minutes * 60, 0, -30):
         mins = remaining // 60
         secs = remaining % 60
-        print(f"⏳ Resuming in: {mins:02d}:{secs:02d}", end='\r', flush=True)
+        print(f"Resuming in: {mins:02d}:{secs:02d}", end='\r', flush=True)
         time.sleep(30)
     
-    print(f"\n\n✅ Quota reset! Restarting browsers...\n")
+    print(f"\n\nQuota reset! Restarting browsers...\n")
     
-    # Reset quota counter
     with quota_lock:
         quota_errors = 0
 
@@ -109,28 +107,24 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
                         # Save to persistent cache
                         phone_cache.set(company, office_phone, location)
                     except Exception as google_err:
-                        # Track quota errors
                         if 'quota' in str(google_err).lower() or 'rate' in str(google_err).lower():
                             with quota_lock:
                                 quota_errors += 1
-                                print(f"  ⚠️  Quota error ({quota_errors}/{MAX_QUOTA_ERRORS})")
+                                print(f"  WARNING: Quota error ({quota_errors}/{MAX_QUOTA_ERRORS})")
                         job_data['office_phone'] = ''
         
         driver.quit()
         
-        # Remove from active list
         with drivers_lock:
             if driver in active_drivers:
                 active_drivers.remove(driver)
         
-        # Check if job was filtered
         if job_data is None:
-            print(f"  🚫 [Job #{job_num}] Filtered")
+            print(f"  [Job #{job_num}] Filtered")
             return None
         
-        # Show office phone status
-        office_phone_status = "📞" if job_data.get('office_phone') else ""
-        print(f"  ✓ [Job #{job_num}] Completed {office_phone_status}")
+        office_phone_status = " (phone)" if job_data.get('office_phone') else ""
+        print(f"  [Job #{job_num}] Completed{office_phone_status}")
         return job_data
     except Exception as e:
         if driver:
@@ -196,39 +190,33 @@ def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename, use
                         future = executor.submit(scrape_job_parallel, job_url, current_job_num, end_job, headless=True)
                         futures[future] = len(futures)
                     else:
-                        print(f"  ⏭️  [Job #{current_job_num}] Already completed (skipped)")
+                        print(f"  [Job #{current_job_num}] Already completed (skipped)")
                 
                 job_index += 1
             
             jobs_to_scrape = len(futures)
             already_done = len(resume_mgr.completed_urls)
-            print(f"  ⚡ Batch collected. To scrape: {jobs_to_scrape}, Already done: {already_done}")
+            print(f"  Batch collected. To scrape: {jobs_to_scrape}, Already done: {already_done}")
         
-        # Close the search driver now that we're done collecting
-        print(f"\n✅ Link collection complete! {len(all_job_urls)} total links found.")
-        print(f"📌 Job range {start_job}-{end_job}: {len(futures)} jobs to scrape")
+        print(f"\nLink collection complete! {len(all_job_urls)} total links found.")
+        print(f"Job range {start_job}-{end_job}: {len(futures)} jobs to scrape")
         if len(resume_mgr.completed_urls) > 0:
-            print(f"♻️  Resuming: {len(resume_mgr.completed_urls)} jobs already completed")
-        print(f"⚡ Scraping in progress with {num_workers} parallel browsers...\n")
+            print(f"Resuming: {len(resume_mgr.completed_urls)} jobs already completed")
+        print(f"Scraping in progress with {num_workers} parallel browsers...\n")
         driver.quit()
         
-        # Initialize results array
         all_jobs_data = [None] * len(futures)
         
-        # Collect results as they complete
         for future in as_completed(futures):
-            # Check quota threshold periodically
             if check_quota_exceeded():
-                print("\n⚠️  Quota threshold reached - triggering pause...")
+                print("\nWARNING: Quota threshold reached - triggering pause...")
                 # Save checkpoint before pausing
                 valid_data = [j for j in all_jobs_data if j is not None]
                 merged_data = resume_mgr.merge_with_existing(valid_data)
                 df_checkpoint = pd.DataFrame(merged_data, columns=COLUMNS)
                 df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
                 resume_mgr.save_progress(valid_data)
-                # Wait and reset
                 wait_for_quota_reset(wait_minutes=5)
-                # Reset error counter handled in wait function
             
             idx = futures[future]
             try:
@@ -236,23 +224,17 @@ def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename, use
                 all_jobs_data[idx] = job_data
                 completed += 1
                 
-                # Progress update
                 if completed % 10 == 0 or completed == len(futures):
                     total_done = completed + len(resume_mgr.completed_urls)
                     print(f"  Progress: {completed}/{len(futures)} jobs completed this session ({(completed/len(futures)*100):.1f}%) | Total: {total_done}")
                 
-                # Save checkpoint using CHECKPOINT_INTERVAL
                 if completed % CHECKPOINT_INTERVAL == 0:
-                    # Filter valid data
                     valid_data = [j for j in all_jobs_data if j is not None]
-                    # Merge with existing checkpoint
                     merged_data = resume_mgr.merge_with_existing(valid_data)
-                    # Save checkpoint
                     df_checkpoint = pd.DataFrame(merged_data, columns=COLUMNS)
                     df_checkpoint.to_excel(filename, index=False, engine='openpyxl')
-                    # Save progress tracking
                     resume_mgr.save_progress(valid_data)
-                    print(f"  💾 Checkpoint saved: {len(merged_data)} total jobs")
+                    print(f"  Checkpoint saved: {len(merged_data)} total jobs")
                     
             except Exception as e:
                 print(f"  ✗ Job {idx+1} failed: {e}")
@@ -261,26 +243,21 @@ def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename, use
     
     current_executor = None
     
-    # Remove any None values with progress feedback
-    print("\n  📊 Processing scraped data...")
+    print("\nProcessing scraped data...")
     all_jobs_data = [j for j in all_jobs_data if j is not None]
     
-    # Merge with existing data
     final_data = resume_mgr.merge_with_existing(all_jobs_data)
     
-    # Report enrichment statistics if enabled
     if ENABLE_GOOGLE_ENRICHMENT:
         phones_found = sum(1 for job in final_data if job.get('office_phone'))
         cache_stats = phone_cache.get_stats()
-        print(f"  📞 Office phones found: {phones_found}/{len(final_data)} jobs")
-        print(f"  📞 Cache: {cache_stats['total_companies']} companies ({cache_stats['with_phone']} with phones)")
+        print(f"  Office phones found: {phones_found}/{len(final_data)} jobs")
+        print(f"  Cache: {cache_stats['total_companies']} companies ({cache_stats['with_phone']} with phones)")
     
-    print(f"  ✅ Data processing complete: {len(final_data)} jobs ready for export")
+    print(f"  Data processing complete: {len(final_data)} jobs ready for export")
     
-    # Cleanup progress file on successful completion
     resume_mgr.cleanup_progress_file()
     
-    # Return the URLs that were actually scraped
     filtered_urls = filter_job_range(all_job_urls, start_job, end_job)
     
     return final_data, filtered_urls
@@ -289,9 +266,7 @@ def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename, use
 def save_checkpoint(all_jobs_data, filename):
     """Save a checkpoint of the current scraping progress."""
     with data_lock:
-        # Filter None values efficiently
         valid_data = [j for j in all_jobs_data if j is not None]
         if valid_data:
-            # Create DataFrame only once and save
             df_checkpoint = pd.DataFrame(valid_data, columns=COLUMNS)
             df_checkpoint.to_excel(filename, index=False, engine='openpyxl')

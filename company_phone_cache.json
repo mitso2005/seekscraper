@@ -1008,5 +1008,25 @@
     "phone": "+61 7 3177 4777",
     "location": "Melbourne VIC (Hybrid)",
     "cached_at": "2025-11-27T12:46:16.258199"
+  },
+  "Miller Leith": {
+    "phone": "(03) 9993 0809",
+    "location": "Melbourne Airport, Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T14:14:37.757705"
+  },
+  "Australian United Retailers": {
+    "phone": "(03) 9809 8600",
+    "location": "South Wharf, Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T14:14:39.941966"
+  },
+  "Tes": {
+    "phone": "+61 3 9020 3455",
+    "location": "Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T14:14:45.590189"
+  },
+  "The Insight Centre": {
+    "phone": "(03) 9670 1909",
+    "location": "Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T14:14:45.806778"
   }
 }

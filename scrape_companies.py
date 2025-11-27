@@ -102,8 +102,8 @@ def scrape_company_jobs(companies=None, scrape_workers=None, search_workers=None
     print(f"Location: {LOCATION}")
     print(f"Companies: {len(companies)}")
     google_status = "ON" if ENABLE_GOOGLE_ENRICHMENT else "OFF"
-    print(f"📞 Google Business enrichment: {google_status}")
-    print(f"🚫 Filtering: recruitment companies + contract/temp + large companies (1000+ employees)")
+    print(f"Google Business enrichment: {google_status}")
+    print(f"Filtering: recruitment companies, contract/temp, large companies (1000+ employees)")
     print()
     
     # Convert LOCATION from "All-Melbourne-VIC" to "Melbourne" for search
@@ -135,14 +135,14 @@ def scrape_company_jobs(companies=None, scrape_workers=None, search_workers=None
             job_to_company[job_url] = company
     
     if skipped_jobs > 0:
-        print(f"\n⏭️  Limiting to top {max_jobs_per_company} jobs per company (skipped {skipped_jobs} jobs)")
+        print(f"\nLimiting to top {max_jobs_per_company} jobs per company (skipped {skipped_jobs} jobs)")
     
     if not all_jobs:
-        print("\n❌ No jobs found!")
+        print("\nNo jobs found!")
         return
     
     print(f"\n{'=' * 60}")
-    print(f"⚡ SCRAPING {len(all_jobs)} JOBS")
+    print(f"SCRAPING {len(all_jobs)} JOBS")
     print(f"{'=' * 60}")
     print(f"Scrape Workers: {scrape_workers}")
     if max_jobs_per_company:
@@ -176,10 +176,8 @@ def scrape_company_jobs(companies=None, scrape_workers=None, search_workers=None
                         # Track count per company
                         company_job_counts[expected_company] = company_job_counts.get(expected_company, 0) + 1
                     else:
-                        # Company mismatch - SEEK returned wrong results
                         company_mismatch_count += 1
                         filtered_count += 1
-                        # print(f"  🚫 Company mismatch: Expected '{expected_company}', got '{scraped_company}'")
                 else:
                     filtered_count += 1
                 
@@ -192,25 +190,22 @@ def scrape_company_jobs(companies=None, scrape_workers=None, search_workers=None
             except Exception as e:
                 print(f"  ✗ Failed to scrape job: {e}")
     
-    # Step 3: Save results
     print(f"\n{'=' * 60}")
-    print("💾 SAVING RESULTS")
+    print("SAVING RESULTS")
     print(f"{'=' * 60}\n")
     
     if results:
         df = pd.DataFrame(results, columns=COLUMNS)
         df.to_excel(output_file, index=False, engine='openpyxl')
-        print(f"✅ Saved {len(results)} jobs to {output_file}")
-        print(f"🚫 Filtered out: {filtered_count} jobs")
+        print(f"Saved {len(results)} jobs to {output_file}")
+        print(f"Filtered out: {filtered_count} jobs")
         print(f"   - Recruitment/contract/temp/large: {filtered_count - company_mismatch_count}")
         print(f"   - Company name mismatches: {company_mismatch_count}")
         
-        # Show cache stats
         stats = phone_cache.get_stats()
-        print(f"📞 Phone cache: {stats['with_phone']}/{stats['total_companies']} companies have phone numbers")
+        print(f"Phone cache: {stats['with_phone']}/{stats['total_companies']} companies have phone numbers")
         
-        # Show breakdown by company
-        print(f"\n📊 Jobs by Company:")
+        print(f"\nJobs by Company:")
         company_counts = {}
         for job in results:
             company = job.get('company', 'Unknown')
@@ -219,9 +214,9 @@ def scrape_company_jobs(companies=None, scrape_workers=None, search_workers=None
         for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
             print(f"  {company}: {count} jobs")
     else:
-        print(f"❌ No valid jobs scraped!")
+        print(f"No valid jobs scraped!")
         if filtered_count > 0:
-            print(f"🚫 All {filtered_count} jobs were filtered out (recruitment/contract/temp/large companies)")
+            print(f"All {filtered_count} jobs were filtered out (recruitment/contract/temp/large companies)")
 
 
 if __name__ == "__main__":

@@ -56,13 +56,12 @@ def stream_job_links(driver, end_job, start_page=1, sort_by_date=False, end_page
         
         if not links:
             print(f"  No links found on page {page_num}")
-            if page_num == start_page:  # Changed from checking page_num == 1
-                print("\n⚠️  No job links found on starting page. Check debug_screenshot.png")
+            if page_num == start_page:
+                print("\nWARNING: No job links found on starting page. Check debug_screenshot.png")
                 driver.save_screenshot("debug_first_page.png")
                 break
-            # For page-based search, if we haven't reached end_page yet, try direct navigation
             elif end_page is not None and page_num < end_page:
-                print(f"  ⚠️  No links on page {page_num}, but target is page {end_page}. Attempting direct navigation...")
+                print(f"  WARNING: No links on page {page_num}, but target is page {end_page}. Attempting direct navigation...")
                 next_page_num = page_num + 1
                 try:
                     fallback_url = build_search_url(sort_by_date=False, page=next_page_num)
@@ -86,13 +85,10 @@ def stream_job_links(driver, end_job, start_page=1, sort_by_date=False, end_page
         if unique_links:
             yield unique_links
         
-        # Try to go to next page
         next_page_clicked = click_next_page(driver)
         if not next_page_clicked:
-            # For page-based search, check if we've reached our target page yet
             if end_page is not None and page_num < end_page:
-                print(f"  ⚠️  Failed to click next page, but target is page {end_page}. Attempting direct navigation...")
-                # Try direct URL navigation as fallback
+                print(f"  WARNING: Failed to click next page, but target is page {end_page}. Attempting direct navigation...")
                 next_page_num = page_num + 1
                 if next_page_num <= end_page:
                     try:

@@ -1,9 +1,4 @@
-"""
-Seek Web Scraper - ICT Jobs in All Melbourne VIC
-
-This scraper collects job postings from Seek for Information & Communication Technology
-roles in the Melbourne area, extracting detailed information including contact details.
-"""
+"""Seek Web Scraper - ICT Jobs Melbourne."""
 
 import time
 import signal
@@ -25,14 +20,13 @@ def main():
     print("=" * 60)
     print("\nNOTE: This scraper is for educational purposes only.")
     
-    # Get user preferences
     sort_by_date = get_sort_preference()
     num_workers = get_parallel_workers()
     use_streaming = get_scraping_mode()
     
-    print(f"\n⚡ Using {num_workers} parallel browser(s) for faster scraping!")
+    print(f"\nUsing {num_workers} parallel browser(s)")
     if use_streaming:
-        print("Streaming mode: Scraping starts immediately as links are found!")
+        print("Streaming mode enabled")
     print("\nInitializing...\n")
     
     driver = setup_driver(headless=True)
@@ -53,17 +47,17 @@ def main():
         
         # Get total jobs available
         total_jobs = get_total_jobs(driver)
-        print(f"\n📊 Total ICT jobs available: {total_jobs}")
+        print(f"\nTotal ICT jobs available: {total_jobs}")
         
         if total_jobs == 0:
-            print("\n⚠️  Could not detect jobs on the page.")
+            print("\nWARNING: Could not detect jobs on the page.")
             print("The browser window is open - please check if:")
             print("  1. The page loaded correctly")
             print("  2. There's a CAPTCHA or bot detection")
             print("  3. The URL is correct")
             print("\nPress Enter to continue with link extraction anyway, or Ctrl+C to quit...")
             input()
-            total_jobs = 9999  # Fallback
+            total_jobs = 9999
         
         # Get job range from user
         start_job, end_job = get_job_range(total_jobs)
@@ -72,14 +66,11 @@ def main():
         filename = create_filename()
         
         google_status = "ON" if ENABLE_GOOGLE_ENRICHMENT else "OFF"
-        print(f"\n🚫 Filtering: recruitment companies + contract/temp + large companies (1000+ employees)...")
-        print(f"📞 Google Business enrichment: {google_status}\n")
+        print(f"\nFiltering: recruitment companies, contract/temp, large companies (1000+ employees)")
+        print(f"Google Business enrichment: {google_status}\n")
         
-        # Choose scraping mode
         if use_streaming:
-            # Streaming mode - scrape while collecting links
-            print(" Starting streaming scrape (links processed as found)...\n")
-            # Pass parameters without page-based search info
+            print("Starting streaming scrape (links processed as found)...\n")
             all_jobs_data, all_job_links = scrape_jobs_streaming(
                 driver, start_job, end_job, num_workers, filename, sort_by_date=sort_by_date
             )
@@ -87,12 +78,11 @@ def main():
             total_processed = len(all_job_links)
             filtered_count = total_processed - len(all_jobs_data)
         else:
-            # Traditional mode - collect all links first, then scrape
             all_job_links = collect_job_links(driver, end_job, start_page=1, sort_by_date=sort_by_date)
             print(f"\nTotal job links collected: {len(all_job_links)}")
             
             if len(all_job_links) == 0:
-                print("\n❌ No jobs found. Exiting.")
+                print("\nNo jobs found. Exiting.")
                 driver.quit()
                 return
             
@@ -100,12 +90,9 @@ def main():
             all_job_links = filter_job_range(all_job_links, start_job, end_job)
             print(f"Selected range: {len(all_job_links)} jobs (from job {start_job} to job {min(end_job, start_job + len(all_job_links) - 1)})")
             
-            # Close initial driver
             driver.quit()
             
-            # Scrape jobs in parallel
-            print(f"\n⚡ Scraping {len(all_job_links)} jobs using {num_workers} parallel browser(s)...")
-            print("(Much faster with parallel processing!)")
+            print(f"\nScraping {len(all_job_links)} jobs using {num_workers} parallel browsers...")
             
             total_processed = len(all_job_links)
             all_jobs_data = scrape_jobs_in_parallel(all_job_links, start_job, num_workers, filename)
@@ -119,43 +106,41 @@ def main():
             print_statistics(None, None, total_processed, filtered_count)
     
     except KeyboardInterrupt:
-        print("\n\n⚠️  Scraping interrupted by user. Shutting down all browsers...")
-        cleanup_all_browsers()  # Kill all parallel browser instances
-        print("🛑 All browsers terminated.")
+        print("\n\nScraping interrupted by user. Shutting down all browsers...")
+        cleanup_all_browsers()
+        print("All browsers terminated.")
         print(f"\nAttempting to save {len(all_jobs_data)} jobs collected so far...")
         if all_jobs_data and filename:
             try:
                 df = save_to_excel(all_jobs_data, filename)
-                print(f"\n✅ Partial data saved to: {filename}")
-                print(f"   Jobs saved: {len(all_jobs_data)}")
+                print(f"\nPartial data saved to: {filename}")
+                print(f"Jobs saved: {len(all_jobs_data)}")
             except Exception as e:
-                print(f"❌ Error saving partial data: {e}")
+                print(f"Error saving partial data: {e}")
         elif filename:
-            # Check if checkpoint file exists
             import os
             if os.path.exists(filename):
-                print(f"\n💾 Checkpoint file already exists: {filename}")
-                print(f"   Your data was saved during the last checkpoint (every {CHECKPOINT_INTERVAL} jobs)")
-                # Count jobs in checkpoint
+                print(f"\nCheckpoint file already exists: {filename}")
+                print(f"Data was saved during the last checkpoint (every {CHECKPOINT_INTERVAL} jobs)")
                 try:
                     import pandas as pd
                     df_check = pd.read_excel(filename)
-                    print(f"   Jobs in checkpoint: {len(df_check)}")
+                    print(f"Jobs in checkpoint: {len(df_check)}")
                 except:
                     pass
             else:
-                print("\n⚠️  No data collected yet in this session.")
+                print("\nNo data collected yet in this session.")
         else:
-            print("\n⚠️  No data to save (scraping hadn't started yet)")
+            print("\nNo data to save (scraping hadn't started yet)")
         sys.exit(0)
     
     except Exception as e:
-        print(f"\n❌ Error during scraping: {e}")
+        print(f"\nError during scraping: {e}")
         if all_jobs_data and filename:
             print(f"Attempting to save {len(all_jobs_data)} jobs before exit...")
             try:
                 df = save_to_excel(all_jobs_data, filename)
-                print(f"✅ Partial data saved to: {filename}")
+                print(f"Partial data saved to: {filename}")
             except:
                 pass
         raise

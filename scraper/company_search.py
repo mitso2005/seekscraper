@@ -104,7 +104,7 @@ def get_company_job_links(driver, company_name, location="Melbourne", classifica
         print(f"  Found {len(job_links)} jobs for {company_name}")
         
     except Exception as e:
-        print(f"  ⚠️  Error searching {company_name}: {e}")
+        print(f"  WARNING: Error searching {company_name}: {e}")
     
     return job_links
 
@@ -153,16 +153,16 @@ def search_multiple_companies(driver, company_list, location="Melbourne", classi
     """
     results = {}
     
-    print(f"\n🔍 Searching {len(company_list)} companies in {location}...\n")
+    print(f"\nSearching {len(company_list)} companies in {location}...\n")
     
     for i, company in enumerate(company_list, 1):
         print(f"[{i}/{len(company_list)}] Searching: {company}")
         job_links = get_company_job_links(driver, company, location, classification)
         results[company] = job_links
-        time.sleep(1)  # Rate limiting
+        time.sleep(1)
     
     total_jobs = sum(len(jobs) for jobs in results.values())
-    print(f"\n✅ Total jobs found: {total_jobs}")
+    print(f"\nTotal jobs found: {total_jobs}")
     
     return results
 
@@ -183,8 +183,8 @@ def search_multiple_companies_parallel(company_list, location="Melbourne", class
     """
     results = {}
     
-    print(f"\n🔍 Searching {len(company_list)} companies in {location} (parallel)...")
-    print(f"⚡ Using {num_workers} parallel workers\n")
+    print(f"\nSearching {len(company_list)} companies in {location} (parallel)...")
+    print(f"Using {num_workers} parallel workers\n")
     
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = {
@@ -208,6 +208,6 @@ def search_multiple_companies_parallel(company_list, location="Melbourne", class
                 results[company_name] = []
     
     total_jobs = sum(len(jobs) for jobs in results.values())
-    print(f"\n✅ Total jobs found: {total_jobs}")
+    print(f"\nTotal jobs found: {total_jobs}")
     
     return results

@@ -6,24 +6,24 @@ LOCATION = "All-Melbourne-VIC"
 BASE_URL = "https://www.seek.com.au"
 
 # Scraping settings
-DEFAULT_WORKERS = 20  # Optimized for Ryzen 7 PRO 7840U (8 cores/16 threads)
-MAX_WORKERS = 20  # With 32GB RAM, you can handle more
-CHECKPOINT_INTERVAL = 50  # Save checkpoint every 50 jobs (reduced from 100 for better safety)
+DEFAULT_WORKERS = 20
+MAX_WORKERS = 20
+CHECKPOINT_INTERVAL = 50
 MAX_PAGES = 100
 
 # Timeout settings (in seconds)
-PAGE_LOAD_TIMEOUT = 1.5  # Reduced from 2 for faster page loads
-ELEMENT_WAIT_TIMEOUT = 1.5  # Reduced from 2 for faster element waits
-BRIEF_PAUSE = 0.2  # Reduced from 0.3
-PAGE_TRANSITION = 0.8  # Reduced from 1
-PAGINATION_SCROLL = 0.8  # Reduced from 1
+PAGE_LOAD_TIMEOUT = 1.5
+ELEMENT_WAIT_TIMEOUT = 1.5
+BRIEF_PAUSE = 0.2
+PAGE_TRANSITION = 0.8
+PAGINATION_SCROLL = 0.8
 
 # Chrome options
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # Google enrichment settings
-ENABLE_GOOGLE_ENRICHMENT = True  # Set to False to skip Google Business phone lookup
-GOOGLE_SEARCH_DELAY = 3  # Not used in parallel mode (each browser has own delays)
+ENABLE_GOOGLE_ENRICHMENT = True
+GOOGLE_SEARCH_DELAY = 3
 
 # Data columns
 COLUMNS = [

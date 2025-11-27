@@ -58,8 +58,6 @@ def extract_company(driver):
 def extract_company_size(driver):
     """Extract company size from the page."""
     try:
-        # Look for company size in various possible locations
-        # SEEK typically shows this as "X-Y employees" or "X+ employees"
         size_selectors = [
             '[data-automation="company-size"]',
             'span[data-automation="company-size"]'
@@ -72,7 +70,6 @@ def extract_company_size(driver):
             except:
                 continue
         
-        # Also check in company profile section
         try:
             profile_elements = driver.find_elements(By.CSS_SELECTOR, '[data-automation="company-profile"] span, [data-automation="advertiser-profile"] span')
             for element in profile_elements:
@@ -249,31 +246,25 @@ def scrape_job_details(driver, job_url):
         except:
             pass
         
-        # Extract all fields
         job_data['job_title'] = extract_job_title(driver)
         
-        # EARLY FILTER 1: Extract and check work type FIRST (remove contract/temp immediately)
         job_data['work_type'] = extract_work_type(driver)
         if not is_permanent_role(job_data['work_type']):
             return None
         
-        # EARLY FILTER 2: Extract company and check if recruitment agency
         job_data['company'] = extract_company(driver)
         if is_recruitment_company(job_data['company']):
             return None
         
-        # EARLY FILTER 3: Extract and check company size (filter out 1000+ employees)
         company_size = extract_company_size(driver)
         if is_large_company(company_size):
             return None
         
-        # Continue with remaining fields only if all filters passed
         job_data['location'] = extract_location(driver)
         job_data['classification'] = extract_classification(driver)
         job_data['salary'] = extract_salary(driver)
         job_data['time_posted'] = extract_time_posted(driver)
         
-        # Extract contact information
         contact_info = extract_contact_details(driver)
         job_data['email'] = contact_info['email']
         job_data['phone'] = contact_info['phone']

@@ -22,10 +22,10 @@ class PhoneCache:
             try:
                 with open(self.cache_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    print(f"📞 Loaded {len(data)} cached phone numbers")
+                    print(f"Loaded {len(data)} cached phone numbers")
                     return data
             except Exception as e:
-                print(f"⚠️  Error loading cache: {e}")
+                print(f"WARNING: Error loading cache: {e}")
                 return {}
         return {}
     
@@ -35,7 +35,7 @@ class PhoneCache:
             with open(self.cache_file, 'w', encoding='utf-8') as f:
                 json.dump(self.cache, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"⚠️  Error saving cache: {e}")
+            print(f"WARNING: Error saving cache: {e}")
     
     def get(self, company_name):
         """Get phone number from cache (thread-safe)."""
