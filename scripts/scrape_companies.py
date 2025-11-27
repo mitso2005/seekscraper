@@ -1,5 +1,9 @@
 """Scrape jobs from specific companies."""
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from scraper.company_search import search_multiple_companies_parallel
 from scraper.streaming_parallel_scraper import scrape_job_parallel, phone_cache
 from scraper.config import (
@@ -75,17 +79,21 @@ def company_names_match(scraped_company, expected_company, threshold=0.6):
     return similarity >= threshold
 
 
-def scrape_company_jobs(companies=None, scrape_workers=None, search_workers=None, max_jobs_per_company=5, output_file="vic_gov_ict_jobs.xlsx"):
+def scrape_company_jobs(companies=None, scrape_workers=None, search_workers=None, max_jobs_per_company=5, output_file=None):
     """
     Scrape jobs from specific companies.
     
     Args:
-        companies: List of company names (default: GOV_COMPANIES from config)
+        companies: List of company names to search (default: GOV_COMPANIES from config)
         scrape_workers: Number of parallel workers for scraping jobs (default: from config)
         search_workers: Number of parallel workers for searching companies (default: from config)
         max_jobs_per_company: Maximum jobs to scrape per company (default: 5, use None for unlimited)
-        output_file: Output Excel filename (default: vic_gov_ict_jobs.xlsx)
+        output_file: Output Excel filename (default: data/vic_gov_ict_jobs.xlsx)
     """
+    # Set default output file
+    if output_file is None:
+        os.makedirs("data", exist_ok=True)
+        output_file = os.path.join("data", "vic_gov_ict_jobs.xlsx")
     # Use config defaults if not specified
     if companies is None:
         companies = GOV_COMPANIES
@@ -220,12 +228,6 @@ def scrape_company_jobs(companies=None, scrape_workers=None, search_workers=None
 
 
 if __name__ == "__main__":
-    # Scrape Victorian Government ICT jobs in Melbourne
-    # Uses GOV_COMPANIES, CLASSIFICATION, and LOCATION from config.py
     scrape_company_jobs(
-        # companies=GOV_COMPANIES,  # Default, can be overridden
-        # scrape_workers=DEFAULT_WORKERS,  # Default from config
-        # search_workers=max(3, DEFAULT_WORKERS // 4),  # Default calculated
-        max_jobs_per_company=5,  # Limit to top 5 jobs per company (set to None for unlimited)
-        output_file="vic_gov_ict_jobs.xlsx"
+        max_jobs_per_company=5
     )

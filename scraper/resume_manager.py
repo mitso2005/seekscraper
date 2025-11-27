@@ -13,7 +13,9 @@ class ResumeManager:
     
     def __init__(self, filename):
         self.filename = filename
-        self.progress_file = filename.replace('.xlsx', '_progress.json')
+        os.makedirs("cache", exist_ok=True)
+        base_name = os.path.basename(filename).replace('.xlsx', '_progress.json')
+        self.progress_file = os.path.join("cache", base_name)
         self.completed_urls = set()
         self.load_progress()
     

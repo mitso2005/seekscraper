@@ -4,6 +4,18 @@
 
 Automated web scraper for collecting ICT job listings from Seek.com.au (Melbourne area). Extracts job details and contact information, exports to Excel.
 
+## Project Structure
+
+```
+seek-webscraper/
+├── scraper/           # Core scraping engine modules
+├── data/              # Output Excel files
+├── cache/             # Phone cache and progress files
+├── scripts/           # Standalone scraping scripts
+├── main.py            # Main entry point
+└── requirements.txt   # Python dependencies
+```
+
 ## Features
 
 - Scrapes 12 data fields per job: title, company, location, classification, work type, salary, time posted, email, phone, office phone, website, URL

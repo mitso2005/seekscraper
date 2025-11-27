@@ -11,9 +11,12 @@ ENV/
 dist/
 build/
 
-# Excel output files
+# Data and cache directories
+data/
+cache/
 *.xlsx
 *.xls
+*.json
 
 # IDE
 .vscode/

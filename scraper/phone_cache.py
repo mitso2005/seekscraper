@@ -5,7 +5,7 @@ import os
 from threading import Lock
 from datetime import datetime
 
-CACHE_FILE = "company_phone_cache.json"
+CACHE_FILE = os.path.join("cache", "company_phone_cache.json")
 cache_lock = Lock()
 
 

@@ -1,5 +1,6 @@
 """Data export and statistics."""
 
+import os
 import pandas as pd
 from datetime import datetime
 from .config import COLUMNS
@@ -9,12 +10,14 @@ def create_filename(interrupted=False, error=False):
     """Generate a timestamped filename for the Excel output."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
+    os.makedirs("data", exist_ok=True)
+    
     if interrupted:
-        return f"seek_ict_jobs_melbourne_interrupted_{timestamp}.xlsx"
+        return os.path.join("data", f"seek_ict_jobs_melbourne_interrupted_{timestamp}.xlsx")
     elif error:
-        return f"seek_ict_jobs_melbourne_error_{timestamp}.xlsx"
+        return os.path.join("data", f"seek_ict_jobs_melbourne_error_{timestamp}.xlsx")
     else:
-        return f"seek_ict_jobs_melbourne_{timestamp}.xlsx"
+        return os.path.join("data", f"seek_ict_jobs_melbourne_{timestamp}.xlsx")
 
 
 def save_to_excel(all_jobs_data, filename):
