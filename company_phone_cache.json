@@ -53,5 +53,135 @@
     "phone": "(03) 9585 4400",
     "location": "Melbourne VIC",
     "cached_at": "2025-11-26T17:32:40.196996"
+  },
+  "NECA Education and Careers Ltd": {
+    "phone": "(03) 9381 1922",
+    "location": "Sunshine, Melbourne VIC",
+    "cached_at": "2025-11-27T11:56:17.318330"
+  },
+  "Anthesis Australia Pty Ltd": {
+    "phone": "(03) 7035 1740",
+    "location": "Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:56:18.360512"
+  },
+  "Melbourne Archdiocese Catholic Schools": {
+    "phone": "(03) 9267 0228",
+    "location": "East Melbourne, Melbourne VIC",
+    "cached_at": "2025-11-27T11:56:22.792192"
+  },
+  "Southern Rural Water": {
+    "phone": "1300 139 510",
+    "location": "Werribee, Melbourne VIC",
+    "cached_at": "2025-11-27T11:56:22.891472"
+  },
+  "Bayside Treeworks Pty Ltd": {
+    "phone": "1800 932 447",
+    "location": "Somerville, Mornington Peninsula & Bass Coast VIC",
+    "cached_at": "2025-11-27T11:56:23.419885"
+  },
+  "Urban Transit Solutions": {
+    "phone": "(03) 9046 8555",
+    "location": "Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:56:27.315034"
+  },
+  "SmartyGrants": {
+    "phone": "+61 3 9320 6888",
+    "location": "North Melbourne, Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:56:28.024157"
+  },
+  "SNAICC - National Voice for our Children": {
+    "phone": "03 9412 1921",
+    "location": "Collingwood, Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:56:36.084485"
+  },
+  "NTRO - National Transport Research Organisation": {
+    "phone": "+61 3 9881 1555",
+    "location": "Port Melbourne, Melbourne VIC",
+    "cached_at": "2025-11-27T11:56:36.401454"
+  },
+  "HCA – Primary Health Services": {
+    "phone": "1300 422 247",
+    "location": "Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:56:36.770903"
+  },
+  "V/Line Corporation": {
+    "phone": "(03) 9619 5900",
+    "location": "Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:56:38.758543"
+  },
+  "Australian Radiation Protection and Nuclear Safety Agency": {
+    "phone": "(03) 9433 2211",
+    "location": "Yallambie, Melbourne VIC",
+    "cached_at": "2025-11-27T11:56:45.972127"
+  },
+  "Office of Public Prosecutions": {
+    "phone": "(03) 9603 7666",
+    "location": "Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:56:50.853115"
+  },
+  "Snooze Management Pty Ltd": {
+    "phone": "1800 940 780",
+    "location": "Canterbury, Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:56:51.062578"
+  },
+  "GMCT": {
+    "phone": "1300 022 298",
+    "location": "Fawkner, Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:56:52.568000"
+  },
+  "SHK": {
+    "phone": "(03) 8620 8000",
+    "location": "Melbourne VIC",
+    "cached_at": "2025-11-27T11:56:54.546673"
+  },
+  "Victorian Electoral Commission": {
+    "phone": "(03) 8620 1100",
+    "location": "Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:57:11.247403"
+  },
+  "Labour Hire Authority": {
+    "phone": "1300 545 200",
+    "location": "Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:57:09.785922"
+  },
+  "Victorian Auditor-General's Office": {
+    "phone": "(03) 8601 7000",
+    "location": "Melbourne VIC",
+    "cached_at": "2025-11-27T11:57:09.932188"
+  },
+  "Secure State": {
+    "phone": "08 8151 3096",
+    "location": "Melbourne VIC",
+    "cached_at": "2025-11-27T11:57:13.764122"
+  },
+  "ESSSuper": {
+    "phone": "1300 650 161",
+    "location": "Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:57:15.470521"
+  },
+  "Melbourne Institute of Higher Education": {
+    "phone": "1300 220 331",
+    "location": "Preston, Melbourne VIC",
+    "cached_at": "2025-11-27T11:57:18.765906"
+  },
+  "Aged Care Quality and Safety Commission": {
+    "phone": "+61 2 9633 1711",
+    "location": "Melbourne VIC",
+    "cached_at": "2025-11-27T11:57:23.611065"
+  },
+  "Greater Western Water": {
+    "phone": "03 9313 8353",
+    "location": "Footscray, Melbourne VIC (Hybrid)",
+    "cached_at": "2025-11-27T11:57:41.525985"
+  },
+  "Arts Centre Melbourne": {
+    "phone": "(03) 9281 8350",
+    "location": "Melbourne VIC",
+    "cached_at": "2025-11-27T11:57:48.728378"
+  },
+  "WV Technologies": {
+    "phone": "03 8402 0189",
+    "location": "North Melbourne, Melbourne VIC",
+    "cached_at": "2025-11-27T11:57:58.992820"
   }
 }
