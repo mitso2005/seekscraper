@@ -70,3 +70,15 @@ class PhoneCache:
                 'with_phone': with_phone,
                 'without_phone': total - with_phone
             }
+    
+    def load(self):
+        """Reload cache from disk (for compatibility)."""
+        self.cache = self._load_cache()
+    
+    def save(self):
+        """Save cache to disk (for compatibility)."""
+        self._save_cache()
+
+
+# Global singleton instance
+phone_cache = PhoneCache()

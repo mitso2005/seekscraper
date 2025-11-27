@@ -1,0 +1,22 @@
+services:
+  scraper:
+    build: .
+    image: seek-scraper:latest
+    container_name: seek-scraper
+    environment:
+      - USE_DEFAULT_CONFIG=false
+    volumes:
+      - ./data:/app/data
+      - ./cache:/app/cache
+    stdin_open: true
+    tty: true
+
+  scraper-auto:
+    build: .
+    image: seek-scraper:latest
+    container_name: seek-scraper-auto
+    environment:
+      - USE_DEFAULT_CONFIG=true
+    volumes:
+      - ./data:/app/data
+      - ./cache:/app/cache
