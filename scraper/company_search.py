@@ -7,39 +7,55 @@ from urllib.parse import quote_plus
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .driver_setup import setup_driver
 import time
+import re
 
 
-def build_company_search_url(company_name, location="Melbourne", classification="Information & Communication Technology"):
+def build_company_search_url(company_name, location="Melbourne", classification="information-communication-technology"):
     """
     Build SEEK URL for company-specific job search.
+    Uses SEEK's path-based format: /{Company-Name}-jobs-in-{classification}/in-{Location}
     
     Args:
         company_name: Company name to search for
         location: Location filter (default: Melbourne)
-        classification: Job category (default: ICT)
+        classification: Job category slug (default: information-communication-technology)
     
     Returns:
         URL string
     """
-    base_url = "https://www.seek.com.au/jobs"
-    params = []
+    # Convert company name to URL-safe slug
+    # 1. Replace & with 'and'
+    company_slug = company_name.replace('&', 'and')
+    # 2. Remove parentheses and their contents (e.g., "(AMES Aust)" -> "")
+    company_slug = re.sub(r'\([^)]*\)', '', company_slug)
+    # 3. Remove special characters except spaces and hyphens
+    company_slug = re.sub(r'[^a-zA-Z0-9\s-]', '', company_slug)
+    # 4. Replace multiple spaces with single space
+    company_slug = re.sub(r'\s+', ' ', company_slug)
+    # 5. Strip leading/trailing spaces
+    company_slug = company_slug.strip()
+    # 6. Replace spaces with hyphens
+    company_slug = company_slug.replace(' ', '-')
+    # 7. Remove multiple consecutive hyphens
+    company_slug = re.sub(r'-+', '-', company_slug)
+    # 8. Remove leading/trailing hyphens
+    company_slug = company_slug.strip('-')
     
-    # Add classification
+    # Convert location to SEEK format (e.g., "Melbourne" -> "Melbourne-VIC")
+    location_slug = f"{location}-VIC" if location and "VIC" not in location else location
+    
+    # Build URL in SEEK's path format
+    # Format: /{Company-Name}-jobs-in-{classification}/in-{Location}
     if classification:
-        params.append(f"classification={quote_plus(classification)}")
+        url = f"https://www.seek.com.au/{company_slug}-jobs-in-{classification}/in-{location_slug}"
+    else:
+        # If no classification, just company and location
+        url = f"https://www.seek.com.au/{company_slug}-jobs/in-{location_slug}"
     
-    # Add location
-    if location:
-        params.append(f"where={quote_plus(location)}")
-    
-    # Add company (advertiser)
-    params.append(f"advertiser={quote_plus(company_name)}")
-    
-    url = f"{base_url}?{'&'.join(params)}"
     return url
 
 
-def get_company_job_links(driver, company_name, location="Melbourne"):
+def get_company_job_links(driver, company_name, location="Melbourne", classification="information-communication-technology"):
     """
     Get all job links for a specific company.
     
@@ -47,17 +63,28 @@ def get_company_job_links(driver, company_name, location="Melbourne"):
         driver: Selenium WebDriver
         company_name: Company to search for
         location: Location filter
+        classification: Job category slug
     
     Returns:
         List of job URLs
     """
-    url = build_company_search_url(company_name, location)
+    url = build_company_search_url(company_name, location, classification)
     driver.get(url)
     time.sleep(2)
     
     job_links = []
     
     try:
+        # Check if there are any jobs (SEEK shows "0 jobs" message if none found)
+        # Try to find the job count or no results message first
+        try:
+            no_results = driver.find_elements(By.CSS_SELECTOR, "[data-automation='noSearchResults']")
+            if no_results:
+                print(f"  Found 0 jobs for {company_name}")
+                return []
+        except:
+            pass
+        
         # Wait for results
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "[data-search-sol-meta]"))
@@ -82,13 +109,14 @@ def get_company_job_links(driver, company_name, location="Melbourne"):
     return job_links
 
 
-def search_company_with_driver(company_name, location="Melbourne", headless=True):
+def search_company_with_driver(company_name, location="Melbourne", classification="information-communication-technology", headless=True):
     """
     Search a single company with its own driver instance (for parallel execution).
     
     Args:
         company_name: Company to search for
         location: Location filter
+        classification: Job category slug
         headless: Run browser in headless mode
     
     Returns:
@@ -97,7 +125,7 @@ def search_company_with_driver(company_name, location="Melbourne", headless=True
     driver = None
     try:
         driver = setup_driver(headless=headless)
-        job_links = get_company_job_links(driver, company_name, location)
+        job_links = get_company_job_links(driver, company_name, location, classification)
         driver.quit()
         return (company_name, job_links)
     except Exception as e:
@@ -110,7 +138,7 @@ def search_company_with_driver(company_name, location="Melbourne", headless=True
         return (company_name, [])
 
 
-def search_multiple_companies(driver, company_list, location="Melbourne"):
+def search_multiple_companies(driver, company_list, location="Melbourne", classification="information-communication-technology"):
     """
     Search jobs for multiple companies (sequential, single driver).
     
@@ -118,6 +146,7 @@ def search_multiple_companies(driver, company_list, location="Melbourne"):
         driver: Selenium WebDriver
         company_list: List of company names
         location: Location filter
+        classification: Job category slug
     
     Returns:
         Dict mapping company names to job URLs
@@ -128,7 +157,7 @@ def search_multiple_companies(driver, company_list, location="Melbourne"):
     
     for i, company in enumerate(company_list, 1):
         print(f"[{i}/{len(company_list)}] Searching: {company}")
-        job_links = get_company_job_links(driver, company, location)
+        job_links = get_company_job_links(driver, company, location, classification)
         results[company] = job_links
         time.sleep(1)  # Rate limiting
     
@@ -138,13 +167,14 @@ def search_multiple_companies(driver, company_list, location="Melbourne"):
     return results
 
 
-def search_multiple_companies_parallel(company_list, location="Melbourne", num_workers=5, headless=True):
+def search_multiple_companies_parallel(company_list, location="Melbourne", classification="information-communication-technology", num_workers=5, headless=True):
     """
     Search jobs for multiple companies in parallel (each with own headless browser).
     
     Args:
         company_list: List of company names
         location: Location filter
+        classification: Job category slug
         num_workers: Number of parallel browser instances
         headless: Run browsers in headless mode
     
@@ -158,7 +188,7 @@ def search_multiple_companies_parallel(company_list, location="Melbourne", num_w
     
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = {
-            executor.submit(search_company_with_driver, company, location, headless): company
+            executor.submit(search_company_with_driver, company, location, classification, headless): company
             for company in company_list
         }
         

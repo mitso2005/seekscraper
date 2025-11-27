@@ -7,12 +7,12 @@ from .driver_setup import setup_driver
 from .job_scraper import scrape_job_details, create_empty_job_data
 from .google_enrichment import search_google_business_phone
 from .config import COLUMNS, ENABLE_GOOGLE_ENRICHMENT
+from .phone_cache import PhoneCache
 
 # Thread-safe lock for data collection
 data_lock = Lock()
-# Cache for company phone numbers (thread-safe)
-company_phone_cache = {}
-cache_lock = Lock()
+# Persistent cache for company phone numbers
+phone_cache = PhoneCache()
 
 
 def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
@@ -28,15 +28,17 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
             location = job_data.get('location', '')
             
             if company and company != 'N/A':
-                # Check cache first (thread-safe)
-                with cache_lock:
-                    if company in company_phone_cache:
-                        job_data['office_phone'] = company_phone_cache[company]
-                    else:
-                        # Not in cache, search Google (still using same driver)
-                        office_phone = search_google_business_phone(driver, company, location)
-                        job_data['office_phone'] = office_phone
-                        company_phone_cache[company] = office_phone
+                # Check persistent cache first
+                cached_phone = phone_cache.get(company)
+                
+                if cached_phone is not None:
+                    job_data['office_phone'] = cached_phone
+                else:
+                    # Not in cache, search Google
+                    office_phone = search_google_business_phone(driver, company, location)
+                    job_data['office_phone'] = office_phone
+                    # Save to persistent cache
+                    phone_cache.set(company, office_phone, location)
         
         driver.quit()
         
@@ -110,8 +112,9 @@ def scrape_jobs_in_parallel(job_urls, start_job, num_workers, filename):
     # Report enrichment statistics if enabled
     if ENABLE_GOOGLE_ENRICHMENT:
         phones_found = sum(1 for job in all_jobs_data if job.get('office_phone'))
-        unique_companies = len(company_phone_cache)
-        print(f"  📞 Office phones found: {phones_found}/{len(all_jobs_data)} jobs ({unique_companies} unique companies)")
+        cache_stats = phone_cache.get_stats()
+        print(f"  📞 Office phones found: {phones_found}/{len(all_jobs_data)} jobs")
+        print(f"  📞 Cache: {cache_stats['total_companies']} companies ({cache_stats['with_phone']} with phones)")
     
     print(f"  ✅ Data processing complete: {len(all_jobs_data)} jobs ready for export")
     
