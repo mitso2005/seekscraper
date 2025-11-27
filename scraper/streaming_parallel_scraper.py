@@ -13,12 +13,12 @@ from .config import COLUMNS, ENABLE_GOOGLE_ENRICHMENT, CHECKPOINT_INTERVAL
 from .streaming_collector import stream_job_links
 from .link_collector import filter_job_range
 from .resume_manager import ResumeManager
+from .phone_cache import PhoneCache
 
 # Thread-safe lock for data collection
 data_lock = Lock()
-# Cache for company phone numbers (thread-safe)
-company_phone_cache = {}
-cache_lock = Lock()
+# Persistent cache for company phone numbers
+phone_cache = PhoneCache()
 # Global executor for cleanup
 current_executor = None
 active_drivers = []
@@ -96,23 +96,25 @@ def scrape_job_parallel(job_url, job_num, total_jobs, headless=True):
             location = job_data.get('location', '')
             
             if company and company != 'N/A':
-                # Check cache first (thread-safe)
-                with cache_lock:
-                    if company in company_phone_cache:
-                        job_data['office_phone'] = company_phone_cache[company]
-                    else:
-                        # Not in cache, search Google
-                        try:
-                            office_phone = search_google_business_phone(driver, company, location)
-                            job_data['office_phone'] = office_phone
-                            company_phone_cache[company] = office_phone
-                        except Exception as google_err:
-                            # Track quota errors
-                            if 'quota' in str(google_err).lower() or 'rate' in str(google_err).lower():
-                                with quota_lock:
-                                    quota_errors += 1
-                                    print(f"  ⚠️  Quota error ({quota_errors}/{MAX_QUOTA_ERRORS})")
-                            job_data['office_phone'] = ''
+                # Check persistent cache first
+                cached_phone = phone_cache.get(company)
+                
+                if cached_phone is not None:
+                    job_data['office_phone'] = cached_phone
+                else:
+                    # Not in cache, search Google
+                    try:
+                        office_phone = search_google_business_phone(driver, company, location)
+                        job_data['office_phone'] = office_phone
+                        # Save to persistent cache
+                        phone_cache.set(company, office_phone, location)
+                    except Exception as google_err:
+                        # Track quota errors
+                        if 'quota' in str(google_err).lower() or 'rate' in str(google_err).lower():
+                            with quota_lock:
+                                quota_errors += 1
+                                print(f"  ⚠️  Quota error ({quota_errors}/{MAX_QUOTA_ERRORS})")
+                        job_data['office_phone'] = ''
         
         driver.quit()
         
@@ -269,8 +271,9 @@ def scrape_jobs_streaming(driver, start_job, end_job, num_workers, filename, use
     # Report enrichment statistics if enabled
     if ENABLE_GOOGLE_ENRICHMENT:
         phones_found = sum(1 for job in final_data if job.get('office_phone'))
-        unique_companies = len(company_phone_cache)
-        print(f"  📞 Office phones found: {phones_found}/{len(final_data)} jobs ({unique_companies} unique companies)")
+        cache_stats = phone_cache.get_stats()
+        print(f"  📞 Office phones found: {phones_found}/{len(final_data)} jobs")
+        print(f"  📞 Cache: {cache_stats['total_companies']} companies ({cache_stats['with_phone']} with phones)")
     
     print(f"  ✅ Data processing complete: {len(final_data)} jobs ready for export")
     
